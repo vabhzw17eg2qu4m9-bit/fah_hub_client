@@ -1,5 +1,11 @@
 # fah_hub_client
 
+[![CI](https://github.com/vabhzw17eg2qu4m9-bit/fah_hub_client/actions/workflows/ci.yml/badge.svg)](https://github.com/vabhzw17eg2qu4m9-bit/fah_hub_client/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/vabhzw17eg2qu4m9-bit/fah_hub_client)](https://github.com/vabhzw17eg2qu4m9-bit/fah_hub_client/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![pub](https://img.shields.io/pub/v/fah_hub_client.svg)](https://pub.dev/packages/fah_hub_client)
+[![pub points](https://img.shields.io/pub/points/fah_hub_client.svg)](https://pub.dev/packages/fah_hub_client/score)
+
 DAP/1 hub client for [flutter_agent_harness](https://github.com/IstiN/flutter_agent_harness):
 a `MessagingRepository` over a signed WebSocket, delivered into the agent loop
 via `Agent.externalSteeringSource`.
@@ -53,4 +59,4 @@ the client secret is stored in `~/.dap/config.json`).
 ## Protocol
 
 DAP protocol documentation lives in the
-[dap repo](https://github.com/vabhzw17eg2qu4m9-bit/distributed_agents).
+[dap repo](https://github.com/vabhzw17eg2qu4m9-bit/dap).
