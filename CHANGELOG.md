@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3
+
+- Request timeouts on `whois`/`flush`/`presenceQuery`
+  (`HubClient.requestTimeout`, default 10 s): a hub that never answers
+  no longer hangs the caller forever — the request fails loudly ("hub
+  did not answer <op> …") and the pending slot is released so a late
+  answer cannot complete a dead request.
+- Hub `error` frames now also complete pending flush/presence requests
+  (mirroring disconnect handling); previously they only surfaced on the
+  `errors` stream and left the caller waiting — the CLI no longer hangs
+  when the hub answers with an error.
+
 ## 0.1.2
 
 - Ported FA review fixes (db65522): `HubIdentity.load` warns loudly and

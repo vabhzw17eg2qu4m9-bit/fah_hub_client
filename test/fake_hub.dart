@@ -16,12 +16,22 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 
 class FakeHub {
-  FakeHub({this.masterSecret});
+  FakeHub({this.masterSecret, Set<String>? silentOps, Set<String>? errorOps})
+      : silentOps = silentOps ?? <String>{},
+        errorOps = errorOps ?? <String>{};
 
   /// When set, every `/ws` dial needs `Authorization: Bearer <token>`
   /// with either the master secret or the issued client secret — a
   /// rejected dial gets HTTP 401 before the upgrade (hub contract).
   final String? masterSecret;
+
+  /// Ops answered with NOTHING (request-hang simulation: the caller
+  /// waits until its timeout).
+  final Set<String> silentOps;
+
+  /// Ops answered with an `error` frame instead of the normal reply
+  /// (error-door tests).
+  final Set<String> errorOps;
 
   /// Client secret issued by the last accepted enroll (bound to
   /// [issuedName]); a re-enroll replaces it — the old secret then 401s.
@@ -155,6 +165,15 @@ class FakeHub {
           continue;
         }
         final op = frame['op'] as String?;
+        if (silentOps.contains(op)) continue; // hang the door: no answer
+        if (errorOps.contains(op)) {
+          _reply(ws, {
+            'op': 'error',
+            'code': 'unsupported_op',
+            'msg': 'fake hub rejects $op',
+          });
+          continue;
+        }
         switch (op) {
           case 'hello':
             agentId = await _hello(ws, frame, token);

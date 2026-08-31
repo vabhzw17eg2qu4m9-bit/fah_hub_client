@@ -140,6 +140,7 @@ class HubClient {
     this.onNotice,
     Duration Function(int attempt)? backoff,
     this.pingInterval = const Duration(seconds: 20),
+    this.requestTimeout = HubClient.defaultRequestTimeout,
   })  : _config = config,
         _identity = identity,
         _clientSecret = clientSecret,
@@ -188,6 +189,12 @@ class HubClient {
   /// loop below (re-hello → flush → hold) before a user send buffers into a
   /// half-open corpse. Null disables it.
   final Duration? pingInterval;
+
+  /// Per-request cap for whois/flush/presenceQuery: a hub that never
+  /// answers a request door fails it loudly after [requestTimeout]
+  /// instead of parking the caller forever. Injectable — tests use a
+  /// short one.
+  final Duration requestTimeout;
 
   WebSocket? _ws;
   StreamSubscription? _subscription;
@@ -243,6 +250,9 @@ class HubClient {
 
   /// Our hub agent id once the hub welcomed us.
   String? agentId;
+
+  /// Request cap for whois/flush/presenceQuery (see [requestTimeout]).
+  static const defaultRequestTimeout = Duration(seconds: 10);
 
   /// 1 s doubling, capped at 30 s (spec "Client reconnect").
   static Duration defaultBackoff(int attempt) {
@@ -622,6 +632,23 @@ class HubClient {
     _send(frame);
   }
 
+  /// Awaits a request door with [requestTimeout]; on timeout, runs
+  /// [cleanup] (release the pending slot so a late answer cannot
+  /// complete a dead request) and fails loudly instead of hanging.
+  Future<T> _withTimeout<T>(
+    Future<T> future,
+    String op,
+    void Function() cleanup,
+  ) {
+    return future.timeout(requestTimeout, onTimeout: () {
+      cleanup();
+      final waited = requestTimeout.inSeconds > 0
+          ? '${requestTimeout.inSeconds}s'
+          : '${requestTimeout.inMilliseconds}ms';
+      throw StateError('hub did not answer $op within $waited');
+    });
+  }
+
   /// Whois with caching — the spec-required lookup before a first DM.
   /// [targetAgentId] is the 16-hex DAP id — discover ids via [peers]
   /// (presence), not names.
@@ -636,7 +663,15 @@ class HubClient {
       _pendingWhois.remove(targetAgentId); // never answered — don't leak it
       rethrow;
     }
-    final info = await completer.future;
+    final info = await _withTimeout(
+      completer.future,
+      'whois',
+      () {
+        if (_pendingWhois[targetAgentId] == completer) {
+          _pendingWhois.remove(targetAgentId);
+        }
+      },
+    );
     _whoisCache[targetAgentId] = info;
     return info;
   }
@@ -646,7 +681,13 @@ class HubClient {
     final completer = Completer<int>();
     _flushCompleter = completer;
     _send({'op': 'flush'});
-    return completer.future;
+    return _withTimeout(
+      completer.future,
+      'flush',
+      () {
+        if (_flushCompleter == completer) _flushCompleter = null;
+      },
+    );
   }
 
   Future<List<AgentInfo>> presenceQuery() {
@@ -654,7 +695,13 @@ class HubClient {
     _presenceCompleter = completer;
     _presenceResult = null;
     _send({'op': 'presence_query'});
-    return completer.future.then((_) => _presenceResult ?? const []);
+    return _withTimeout(
+      completer.future.then((_) => _presenceResult ?? const []),
+      'presence_query',
+      () {
+        if (_presenceCompleter == completer) _presenceCompleter = null;
+      },
+    );
   }
 
   /// Presence list from the hub (`dap_peers`): ONLINE ONLY by default —
@@ -775,6 +822,7 @@ class HubClient {
       if (!completer.isCompleted) completer.completeError(error);
     }
     _pendingWhois.clear();
+    _failFlushPresence(error);
   }
 
   Future<void> _onMsg(Map<String, dynamic> frame) async {
@@ -892,6 +940,19 @@ class HubClient {
     if (welcome != null && !welcome.isCompleted) welcome.complete(ok);
   }
 
+  /// Completes the pending flush/presence doors with [error] and frees
+  /// their slots — shared by [_onError] (hub answered with an error
+  /// frame) and [_failPending] (connection-level teardown).
+  void _failFlushPresence(Object error) {
+    for (final completer in [_flushCompleter, _presenceCompleter]) {
+      if (completer != null && !completer.isCompleted) {
+        completer.completeError(error);
+      }
+    }
+    _flushCompleter = null;
+    _presenceCompleter = null;
+  }
+
   void _failPending(String reason) {
     final welcome = _welcomeCompleter;
     _welcomeCompleter = null;
@@ -902,13 +963,7 @@ class HubClient {
       if (!completer.isCompleted) completer.completeError(StateError(reason));
     }
     _pendingWhois.clear();
-    for (final completer in [_flushCompleter, _presenceCompleter]) {
-      if (completer != null && !completer.isCompleted) {
-        completer.completeError(StateError(reason));
-      }
-    }
-    _flushCompleter = null;
-    _presenceCompleter = null;
+    _failFlushPresence(StateError(reason));
   }
 
   static SimplePublicKey _dhPubkey(String b64) =>
