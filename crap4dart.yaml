@@ -1,0 +1,29 @@
+# crap4dart configuration for fah_hub_client.
+# https://github.com/IstiN/crap4dart
+#
+# RATCHET: the CRAP threshold is pinned at the current worst score
+# (20.0, `MailboxEntry.==` in lib/src/fah/messaging.dart) — pushes may
+# only make the codebase BETTER, never worse. Lower the threshold whenever
+# the top offender is fixed (run: dart pub global run crap4dart:crap4dart analyze).
+
+sources: [lib]
+
+exclude:
+  - '**.g.dart'
+  - '**.freezed.dart'
+  - '**.mocks.dart'
+  - 'build/**'
+
+crap:
+  enabled: true
+  # Current max CRAP score in the repo (2026-08-31, measured at extraction:
+  # MailboxEntry.== is CC 4 at 0% line coverage -> CRAP 20). Only down
+  # from here.
+  threshold: 20.0
+
+coverage:
+  # scripts/pre-commit regenerates this (dart test --coverage) right
+  # before the CRAP step runs.
+  lcov_path: coverage/lcov.info
+  required: true
+  branch_coverage: true
