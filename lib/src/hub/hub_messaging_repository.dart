@@ -66,9 +66,8 @@ class HubMessagingRepository implements MessagingRepository {
   HubStatus status() => client.status();
 
   /// `dap_peers` passthrough (see [HubClient.peers]): online-only hub
-  /// presence list unless [includeOffline] is true.
-  Future<List<AgentInfo>> peers({bool includeOffline = false}) =>
-      client.peers(includeOffline: includeOffline);
+  /// presence list, our own entry marked self.
+  Future<List<AgentInfo>> peers() => client.peers();
 
   /// dap_connect passthrough (see [HubClient.connectTo]): runtime move
   /// of the live connection to another hub, optionally under a new

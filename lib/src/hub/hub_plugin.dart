@@ -187,14 +187,14 @@ class HubPlugin implements FahPlugin {
   }
 
   /// Hub presence list for the `dap_peers` tool (see [HubClient.peers]):
-  /// online-only unless [includeOffline] is true; same registerTool
-  /// pattern as [status].
-  Future<List<AgentInfo>> peers({bool includeOffline = false}) async {
+  /// online-only, our own entry marked self; same registerTool pattern
+  /// as [status].
+  Future<List<AgentInfo>> peers() async {
     final repository = _repository;
     if (repository == null) {
       throw StateError('plugin not started — call start() first');
     }
-    return repository.peers(includeOffline: includeOffline);
+    return repository.peers();
   }
 
   /// Our hub agent id once connected.

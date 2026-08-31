@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+- BREAKING (owner decision 2026-08-31): `peers()` takes NO parameters —
+  the `includeOffline` flag is gone. It now ALWAYS returns online-only
+  agents and marks our own entry with `AgentInfo.self == true` (self
+  stays in the list, not excluded). `AgentInfo` gains the `self` field
+  (default false); raw `presenceQuery()`/`whois` entries are unchanged.
+  `HubPlugin.peers` and `HubMessagingRepository.peers` aligned to the
+  same no-flag shape.
+
 ## 0.1.4
 
 - Request doors (`whois`/`flush`/`presenceQuery`) now fan out to waiter

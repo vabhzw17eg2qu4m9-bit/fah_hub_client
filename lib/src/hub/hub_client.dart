@@ -44,6 +44,7 @@ class AgentInfo {
     this.name,
     this.signingPubkeyB64,
     this.dhPublicKey,
+    this.self = false,
   });
 
   final String agentId;
@@ -54,6 +55,20 @@ class AgentInfo {
   /// Peer X25519 public key for payload E2E (the hello `x25519` field,
   /// echoed by `agent_info`).
   final SimplePublicKey? dhPublicKey;
+
+  /// True when this entry is OUR own agent (only [HubClient.peers]
+  /// marks it); raw presence/whois entries are always false.
+  final bool self;
+
+  /// Copy of this entry flagged as our own ([self] = true).
+  AgentInfo asSelf() => AgentInfo(
+        agentId: agentId,
+        name: name,
+        online: online,
+        signingPubkeyB64: signingPubkeyB64,
+        dhPublicKey: dhPublicKey,
+        self: true,
+      );
 }
 
 /// Connection snapshot for the `dap_status` tool: who we are, where we
@@ -709,19 +724,15 @@ class HubClient {
     );
   }
 
-  /// Presence list from the hub (`dap_peers`): ONLINE ONLY by default —
-  /// one [AgentInfo] per connected agent, self included, each flagged
-  /// online/offline. Set [includeOffline] to true to also list offline
-  /// agents (their DMs queue to the hub mailbox). Same wire op as
-  /// [presenceQuery].
-  Future<List<AgentInfo>> peers({bool includeOffline = false}) async {
-    final agents = await presenceQuery();
-    return includeOffline
-        ? agents
-        : [
-            for (final agent in agents)
-              if (agent.online) agent,
-          ];
+  /// Presence list from the hub (`dap_peers`): ONLINE ONLY — one
+  /// [AgentInfo] per connected agent, our own entry included and marked
+  /// [AgentInfo.self]. Same wire op as [presenceQuery].
+  Future<List<AgentInfo>> peers() async {
+    final me = agentId;
+    return [
+      for (final agent in await presenceQuery())
+        if (agent.online) agent.agentId == me ? agent.asSelf() : agent,
+    ];
   }
 
   /// Snapshot for the `dap_status` tool — safe to call any time, also
