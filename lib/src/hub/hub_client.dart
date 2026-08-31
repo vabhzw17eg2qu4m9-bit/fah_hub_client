@@ -213,10 +213,14 @@ class HubClient {
 
   Completer<String> _firstWelcome = Completer<String>();
   Completer<bool>? _welcomeCompleter;
-  Completer<int>? _flushCompleter;
-  Completer<void>? _presenceCompleter;
-  List<AgentInfo>? _presenceResult;
-  final _pendingWhois = <String, Completer<AgentInfo>>{};
+
+  /// Request doors as waiter LISTS: an answer (or failure) fans out to
+  /// EVERY current waiter, so a concurrent caller (the 15s PendingInvites
+  /// poller vs a tool's resolve, an inbound-DM whois vs a sendDm) can
+  /// never clobber an earlier one — 0.1.3's single slots orphaned it.
+  final _flushWaiters = <Completer<int>>[];
+  final _presenceWaiters = <Completer<List<AgentInfo>>>[];
+  final _pendingWhois = <String, List<Completer<AgentInfo>>>{};
   final _whoisCache = <String, AgentInfo>{};
 
   final _inbound = StreamController<InboundMessage>.broadcast();
@@ -656,51 +660,52 @@ class HubClient {
     final cached = _whoisCache[targetAgentId];
     if (cached != null) return cached;
     final completer = Completer<AgentInfo>();
-    _pendingWhois[targetAgentId] = completer;
+    _pendingWhois.putIfAbsent(targetAgentId, () => []).add(completer);
     try {
       _send({'op': 'whois', 'agentId': targetAgentId});
     } on Object {
-      _pendingWhois.remove(targetAgentId); // never answered — don't leak it
+      // never answered — don't leak it
+      _dropWhoisWaiter(targetAgentId, completer);
       rethrow;
     }
     final info = await _withTimeout(
       completer.future,
       'whois',
-      () {
-        if (_pendingWhois[targetAgentId] == completer) {
-          _pendingWhois.remove(targetAgentId);
-        }
-      },
+      () => _dropWhoisWaiter(targetAgentId, completer),
     );
     _whoisCache[targetAgentId] = info;
     return info;
   }
 
+  /// Releases exactly this caller's waiter (send failure / request
+  /// timeout); concurrent waiters on the same target stay registered.
+  void _dropWhoisWaiter(String targetAgentId, Completer<AgentInfo> completer) {
+    final waiters = _pendingWhois[targetAgentId];
+    if (waiters == null) return;
+    waiters.remove(completer);
+    if (waiters.isEmpty) _pendingWhois.remove(targetAgentId);
+  }
+
   /// Drains the hub-side offline mailbox; returns the drained count.
   Future<int> flush() {
     final completer = Completer<int>();
-    _flushCompleter = completer;
+    _flushWaiters.add(completer);
     _send({'op': 'flush'});
     return _withTimeout(
       completer.future,
       'flush',
-      () {
-        if (_flushCompleter == completer) _flushCompleter = null;
-      },
+      () => _flushWaiters.remove(completer),
     );
   }
 
   Future<List<AgentInfo>> presenceQuery() {
-    final completer = Completer<void>();
-    _presenceCompleter = completer;
-    _presenceResult = null;
+    final completer = Completer<List<AgentInfo>>();
+    _presenceWaiters.add(completer);
     _send({'op': 'presence_query'});
     return _withTimeout(
-      completer.future.then((_) => _presenceResult ?? const []),
+      completer.future,
       'presence_query',
-      () {
-        if (_presenceCompleter == completer) _presenceCompleter = null;
-      },
+      () => _presenceWaiters.remove(completer),
     );
   }
 
@@ -776,10 +781,9 @@ class HubClient {
       case 'presence':
         _onPresence(frame);
       case 'flushed':
-        final flush = _flushCompleter;
-        _flushCompleter = null;
-        if (flush != null && !flush.isCompleted) {
-          flush.complete(frame['count'] as int? ?? 0);
+        final count = frame['count'] as int? ?? 0;
+        for (final waiter in _drain(_flushWaiters)) {
+          if (!waiter.isCompleted) waiter.complete(count);
         }
     }
   }
@@ -818,8 +822,8 @@ class HubClient {
       welcome.completeError(error);
       return;
     }
-    for (final completer in _pendingWhois.values) {
-      if (!completer.isCompleted) completer.completeError(error);
+    for (final waiters in _pendingWhois.values) {
+      _failAll(waiters, error);
     }
     _pendingWhois.clear();
     _failFlushPresence(error);
@@ -900,19 +904,20 @@ class HubClient {
 
   void _onAgentInfo(Map<String, dynamic> frame) {
     final info = _infoFrom(frame);
-    final completer = _pendingWhois.remove(info.agentId);
-    if (completer != null && !completer.isCompleted) {
-      completer.complete(info);
+    final waiters = _pendingWhois.remove(info.agentId);
+    if (waiters == null) return;
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) waiter.complete(info);
     }
   }
 
   void _onPresence(Map<String, dynamic> frame) {
-    _presenceResult = (frame['agents'] as List? ?? [])
+    final agents = (frame['agents'] as List? ?? [])
         .map((raw) => _infoFrom((raw as Map).cast<String, dynamic>()))
         .toList();
-    final completer = _presenceCompleter;
-    _presenceCompleter = null;
-    if (completer != null && !completer.isCompleted) completer.complete();
+    for (final waiter in _drain(_presenceWaiters)) {
+      if (!waiter.isCompleted) waiter.complete(agents);
+    }
   }
 
   AgentInfo _infoFrom(Map<String, dynamic> frame) {
@@ -940,17 +945,27 @@ class HubClient {
     if (welcome != null && !welcome.isCompleted) welcome.complete(ok);
   }
 
-  /// Completes the pending flush/presence doors with [error] and frees
-  /// their slots — shared by [_onError] (hub answered with an error
-  /// frame) and [_failPending] (connection-level teardown).
+  /// Detaches the current waiters before completing them: a caller that
+  /// registers mid-iteration is never hit by an answer already delivered.
+  List<Completer<T>> _drain<T>(List<Completer<T>> waiters) {
+    final pending = List.of(waiters);
+    waiters.clear();
+    return pending;
+  }
+
+  /// Fails the pending flush/presence doors with [error] and frees their
+  /// slots — shared by [_onError] (hub answered with an error frame) and
+  /// [_failPending] (connection-level teardown).
   void _failFlushPresence(Object error) {
-    for (final completer in [_flushCompleter, _presenceCompleter]) {
-      if (completer != null && !completer.isCompleted) {
-        completer.completeError(error);
-      }
+    _failAll(_flushWaiters, error);
+    _failAll(_presenceWaiters, error);
+  }
+
+  /// Fan-out failure: every waiter of a door gets [error], list emptied.
+  void _failAll<T>(List<Completer<T>> waiters, Object error) {
+    for (final waiter in _drain(waiters)) {
+      if (!waiter.isCompleted) waiter.completeError(error);
     }
-    _flushCompleter = null;
-    _presenceCompleter = null;
   }
 
   void _failPending(String reason) {
@@ -959,8 +974,8 @@ class HubClient {
     if (welcome != null && !welcome.isCompleted) {
       welcome.completeError(StateError(reason));
     }
-    for (final completer in _pendingWhois.values) {
-      if (!completer.isCompleted) completer.completeError(StateError(reason));
+    for (final waiters in _pendingWhois.values) {
+      _failAll(waiters, StateError(reason));
     }
     _pendingWhois.clear();
     _failFlushPresence(StateError(reason));

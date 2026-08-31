@@ -27,10 +27,9 @@ Future<HubClient> connect(FakeHub hub) async {
     requestTimeout: shortRequestTimeout,
   );
   await client.connect();
-  // welcomeEvents fires after the post-welcome mailbox flush settles —
-  // without this barrier a test flush() would race it for the single
-  // _flushCompleter slot and be orphaned (pre-existing single-slot
-  // design, not what these tests exercise).
+  // Lets the post-welcome mailbox flush settle so the per-test knobs
+  // (silent/error ops) and assertions apply only to the requests the
+  // test itself fires.
   await client.welcomeEvents.first;
   return client;
 }
@@ -124,5 +123,43 @@ void main() {
     hub.silentOps.clear();
     final agents = await client.presenceQuery();
     expect(agents.map((a) => a.agentId), contains(client.agentId));
+  }, timeout: timeout);
+
+  test('concurrent presence queries all resolve when the hub answers',
+      () async {
+    client = await connect(hub);
+
+    // The 15 s PendingInvites poller racing a tool's peers() call used
+    // to clobber the single _presenceCompleter slot: the hub answered,
+    // but the first caller's completer was orphaned and hung forever.
+    final results = await Future.wait(
+        [client.presenceQuery(), client.peers(), client.presenceQuery()]);
+    for (final agents in results) {
+      expect(agents.map((a) => a.agentId), contains(client.agentId));
+    }
+  }, timeout: timeout);
+
+  test('concurrent whois for the same agent all resolve', () async {
+    client = await connect(hub);
+    final other = await connect(hub); // registered peer to look up
+
+    // An inbound DM (_onMsg) and a sendDm racing whois() for the same
+    // target shared one map slot — the loser's caller hung forever.
+    final futures = [
+      client.whois(other.agentId!),
+      client.whois(other.agentId!),
+      client.whois(other.agentId!),
+    ];
+    for (final info in await Future.wait(futures)) {
+      expect(info.agentId, other.agentId);
+    }
+    await other.disconnect();
+  }, timeout: timeout);
+
+  test('concurrent flush calls all resolve', () async {
+    client = await connect(hub);
+
+    final counts = await Future.wait([client.flush(), client.flush()]);
+    expect(counts, everyElement(0));
   }, timeout: timeout);
 }

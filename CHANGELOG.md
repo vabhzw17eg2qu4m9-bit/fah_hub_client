@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.4
+
+- Request doors (`whois`/`flush`/`presenceQuery`) now fan out to waiter
+  LISTS: concurrent callers all complete with the answer. Previously a
+  second caller clobbered the single completer and ORPHANED the first —
+  the live hang was the 15s PendingInvites presence poller racing a
+  tool's `peers()`, and an inbound-DM sender whois racing a `sendDm` to
+  the same peer. 0.1.3's request timeouts and error-frame completion are
+  unchanged (each caller keeps its own 10s cap; genuine hub silence
+  still fails loudly).
+- Ported the FA SilentHub acceptance suite (`test/silent_hub_test.dart`):
+  5 scenarios — silent `presence_query`, silent `whois`, error-answered
+  `presence_query`, and the two clobber races (poller-vs-tool
+  `presenceQuery`, whois-vs-whois on one target) — asserting every
+  request COMPLETES within 3s; with a healthy hub answering once, both
+  concurrent callers must receive the answer.
+
 ## 0.1.3
 
 - Request timeouts on `whois`/`flush`/`presenceQuery`
