@@ -1,6 +1,7 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
+
 
 - Enrollment auth: first connect enrolls via `DAP_MASTER_SECRET`; the
   hub-issued client secret is persisted in `~/.dap/config.json`.
@@ -11,3 +12,5 @@
   `DAP_AGENT_NAME`, `DAP_KEY_PATH`, `DAP_CHANNELS_FILE`) >
   `~/.dap/config.json` > defaults; identity auto-created at
   `~/.dap/keys/fah/<name>.key`.
+
+## Unreleased
