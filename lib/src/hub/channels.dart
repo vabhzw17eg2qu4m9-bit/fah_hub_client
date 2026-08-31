@@ -34,11 +34,9 @@ Future<Map<String, ChannelKeys>> loadChannelKeys(String file) async {
     final out = <String, ChannelKeys>{};
     for (final entry in raw.entries) {
       final keys = entry.value;
-      if (keys is Map &&
-          keys['pub'] is String &&
-          keys['priv'] is String) {
-        out[entry.key.toString()] =
-            ChannelKeys(pub: keys['pub'] as String, priv: keys['priv'] as String);
+      if (keys is Map && keys['pub'] is String && keys['priv'] is String) {
+        out[entry.key.toString()] = ChannelKeys(
+            pub: keys['pub'] as String, priv: keys['priv'] as String);
       }
     }
     return out;

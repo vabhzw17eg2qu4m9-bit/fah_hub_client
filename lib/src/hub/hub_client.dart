@@ -215,6 +215,7 @@ class HubClient {
   final _inbound = StreamController<InboundMessage>.broadcast();
   final _errors = StreamController<HubError>.broadcast();
   final _welcomeEvents = StreamController<void>.broadcast();
+
   /// All inbound `msg` frames, oldest first.
   Stream<InboundMessage> get inbound => _inbound.stream;
 
@@ -385,7 +386,8 @@ class HubClient {
     await _welcomeEvents.close();
   }
 
-  Future<String> retarget({String? url, HubIdentity? keys, String? name}) async {
+  Future<String> retarget(
+      {String? url, HubIdentity? keys, String? name}) async {
     _epoch++; // retire any loop parked in backoff (no double-connect)
     _closing = true;
     // Paired teardown with no await gap between reading and clearing the
@@ -495,7 +497,8 @@ class HubClient {
         }
       }
       for (final entry in config.channels.entries) {
-        if (store == null || !store.knows(entry.key)) join(entry.key, entry.value);
+        if (store == null || !store.knows(entry.key))
+          join(entry.key, entry.value);
       }
     } on Object {
       // socket dropped mid-join — the reconnect loop re-runs us
@@ -544,8 +547,12 @@ class HubClient {
     final keys = await ensureChannelKeys(channel);
     await sendDm(
       toAgentId,
-      jsonEncode(
-          {'t': 'chankey', 'channel': channel, 'pub': keys.pub, 'priv': keys.priv}),
+      jsonEncode({
+        't': 'chankey',
+        'channel': channel,
+        'pub': keys.pub,
+        'priv': keys.priv
+      }),
     );
   }
 
@@ -657,10 +664,12 @@ class HubClient {
   /// [presenceQuery].
   Future<List<AgentInfo>> peers({bool includeOffline = false}) async {
     final agents = await presenceQuery();
-    return includeOffline ? agents : [
-        for (final agent in agents)
-          if (agent.online) agent,
-      ];
+    return includeOffline
+        ? agents
+        : [
+            for (final agent in agents)
+              if (agent.online) agent,
+          ];
   }
 
   /// Snapshot for the `dap_status` tool — safe to call any time, also
@@ -804,7 +813,8 @@ class HubClient {
   }
 
   Future<String> _decryptChannel(String channel, Map frame) async {
-    final privB64 = channelStore?.privOf(channel) ?? config.channelSecrets[channel];
+    final privB64 =
+        channelStore?.privOf(channel) ?? config.channelSecrets[channel];
     final pubB64 = channelStore?.pubOf(channel) ?? config.channels[channel];
     if (privB64 == null || pubB64 == null) throw StateError('no channel key');
     // Sender encrypted with senderPriv x channelPub; we decrypt with
@@ -864,8 +874,7 @@ class HubClient {
       name: frame['name'] as String?,
       online: frame['online'] as bool? ?? false,
       signingPubkeyB64: frame['pubkey'] as String?,
-      dhPublicKey:
-          (dhB64 == null || dhB64.isEmpty) ? null : _dhPubkey(dhB64),
+      dhPublicKey: (dhB64 == null || dhB64.isEmpty) ? null : _dhPubkey(dhB64),
     );
   }
 

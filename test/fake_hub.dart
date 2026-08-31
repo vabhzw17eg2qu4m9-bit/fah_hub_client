@@ -112,7 +112,8 @@ class FakeHub {
   /// Resolves when the hub has seen [n] signature-verified hellos.
   Future<void> waitForHellos(int n) async {
     if (_hellosSeen >= n) return;
-    await hellos.firstWhere((_) => _hellosSeen >= n)
+    await hellos
+        .firstWhere((_) => _hellosSeen >= n)
         .timeout(const Duration(seconds: 5));
   }
 
@@ -147,7 +148,8 @@ class FakeHub {
     String? agentId;
     try {
       await for (final Object data in ws) {
-        final frame = (jsonDecode(data as String) as Map).cast<String, dynamic>();
+        final frame =
+            (jsonDecode(data as String) as Map).cast<String, dynamic>();
         if (frame['t'] == 'enroll') {
           _enroll(ws, agentId, token);
           continue;
@@ -262,7 +264,8 @@ class FakeHub {
     final nonce = frame['nonce'] as String?;
     if (nonce == null || nonce.length < 16) return 'bad_frame';
     if (_nonces.contains(nonce)) return 'replayed_nonce';
-    if (!await _verifySig(frame, frame['pubkey'] as String)) return 'bad_signature';
+    if (!await _verifySig(frame, frame['pubkey'] as String))
+      return 'bad_signature';
     _nonces.add(nonce);
     return null;
   }
@@ -279,8 +282,7 @@ class FakeHub {
     final unsigned = Map<String, dynamic>.from(frame)..remove('sig');
     final canonical = _canonicalJson(unsigned);
     final digest = await Sha256().hash(utf8.encode(canonical));
-    final payload =
-        'dap1|${frame['op']}|${frame['ts']}|${_hex(digest.bytes)}';
+    final payload = 'dap1|${frame['op']}|${frame['ts']}|${_hex(digest.bytes)}';
     final publicKey = SimplePublicKey(
       base64Decode(signerPubkeyB64),
       type: KeyPairType.ed25519,
@@ -336,7 +338,8 @@ class FakeHub {
     Map<String, dynamic> frame,
   ) async {
     if (!_conns.containsKey(fromAgentId)) {
-      _reply(ws, {'op': 'error', 'code': 'not_authenticated', 'msg': 'hello first'});
+      _reply(ws,
+          {'op': 'error', 'code': 'not_authenticated', 'msg': 'hello first'});
       return;
     }
     if (!await _verifySig(frame, _registry[fromAgentId]!.pubkeyB64)) {

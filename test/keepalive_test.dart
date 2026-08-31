@@ -59,9 +59,9 @@ class SilentHub {
           .group(1)!;
       final accept =
           base64Encode((await Sha1().hash(utf8.encode(key + _wsGuid))).bytes);
-      socket.add(utf8.encode(
-          'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'
-          'Connection: Upgrade\r\nSec-WebSocket-Accept: $accept\r\n\r\n'));
+      socket.add(utf8
+          .encode('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'
+              'Connection: Upgrade\r\nSec-WebSocket-Accept: $accept\r\n\r\n'));
       buf.clear(); // keep draining; never send anything again
     }
   }
@@ -73,7 +73,8 @@ class SilentHub {
 }
 
 void main() {
-  test('keepalive: silent peer (no pongs) is torn down; reconnect loop takes over',
+  test(
+      'keepalive: silent peer (no pongs) is torn down; reconnect loop takes over',
       () async {
     final hub = SilentHub();
     await hub.start();
@@ -165,8 +166,8 @@ void main() {
     );
     await expectLater(
         client.sendToChannel('general', 'anyone?'), throwsA(isA<StateError>()));
-    await expectLater(
-        client.sendDm('a_0123456789abcdef', 'anyone?'), throwsA(isA<StateError>()));
+    await expectLater(client.sendDm('a_0123456789abcdef', 'anyone?'),
+        throwsA(isA<StateError>()));
   }, timeout: timeout);
 
   test('error surfacing: hub error frame is exposed, never silent', () async {

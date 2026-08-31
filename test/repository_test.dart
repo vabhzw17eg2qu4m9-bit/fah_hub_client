@@ -178,7 +178,8 @@ void main() {
     await plugin.dispose();
   }, timeout: timeout);
 
-  test('HubPlugin.connectTo: bare host + name + channel → new identity on '
+  test(
+      'HubPlugin.connectTo: bare host + name + channel → new identity on '
       'hub 2, lobby joined, url/name/channels persisted', () async {
     final hub2 = FakeHub();
     await hub2.start();

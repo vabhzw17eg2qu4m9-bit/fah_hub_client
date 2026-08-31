@@ -40,6 +40,9 @@ Future<Uint8List> hkdfSha256({
   var previous = const <int>[];
   var counter = 1;
   while (okm.length < length) {
+    if (counter > 255) {
+      throw StateError('HKDF exceeded RFC 5869 iteration cap');
+    }
     final block = await _macAlgorithm.calculateMac(
       [...previous, ...info, counter],
       secretKey: SecretKey(prk.bytes),

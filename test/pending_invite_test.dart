@@ -34,15 +34,19 @@ Future<HubClient> connectNamed(
 }
 
 void main() {
-  test('config back-compat: missing/non-array invites → [], persist '
+  test(
+      'config back-compat: missing/non-array invites → [], persist '
       'replaces authoritatively and keeps other keys', () async {
     final tmp = await tmpHome('fah-pend-cfg-');
     addTearDown(() => tmp.delete(recursive: true));
     final cfgFile = '${tmp.path}/config.json';
 
     // File written before invites existed: key absent → empty list.
-    await File(cfgFile).writeAsString(jsonEncode(
-        {'url': 'ws://legacy:9/ws', 'name': 'legacy', 'channels': ['ops']}));
+    await File(cfgFile).writeAsString(jsonEncode({
+      'url': 'ws://legacy:9/ws',
+      'name': 'legacy',
+      'channels': ['ops']
+    }));
     expect(readPendingInvites(cfgFile), isEmpty);
 
     // Authoritative persist: invites replaced, other keys untouched.
@@ -60,8 +64,7 @@ void main() {
     expect(readPendingInvites(cfgFile), isEmpty);
 
     // Non-array invites key → empty; malformed entries are skipped.
-    await File(cfgFile)
-        .writeAsString(jsonEncode({'invites': 'corrupt'}));
+    await File(cfgFile).writeAsString(jsonEncode({'invites': 'corrupt'}));
     expect(readPendingInvites(cfgFile), isEmpty);
     await File(cfgFile).writeAsString(jsonEncode({
       'invites': [
@@ -74,15 +77,15 @@ void main() {
         [const PendingInvite(name: 'ok', channel: 'team')]);
   });
 
-  test('dapHostOf: scheme and trailing /ws stripped for connect lines',
-      () {
+  test('dapHostOf: scheme and trailing /ws stripped for connect lines', () {
     expect(dapHostOf('ws://127.0.0.1:8787/ws'), '127.0.0.1:8787');
     expect(dapHostOf('wss://hub.example.com/ws'), 'hub.example.com');
     expect(dapHostOf('ws://h:1/other'), 'h:1/other');
     expect(dapHostOf('127.0.0.1:1'), '127.0.0.1:1');
   });
 
-  test('arm: unknown name does not error — channel auto-created + joined '
+  test(
+      'arm: unknown name does not error — channel auto-created + joined '
       'at arm time, invite persisted (deduped), connect line returned',
       () async {
     final hub = FakeHub();
@@ -106,7 +109,8 @@ void main() {
     expect(result.pending, isTrue);
     expect(result.channel, 'general');
     expect(result.to, 'carol');
-    expect(result.connectLine,
+    expect(
+        result.connectLine,
         'send to carol:  /dap 127.0.0.1:${hub.url.port} carol\n'
         'first connect needs DAP_MASTER_SECRET set (enrolls once, then stored)');
     expect((await aJoined).agentId, a.agentId); // inviter joined at arm
@@ -132,7 +136,8 @@ void main() {
     expect(down.error, contains('not connected'));
   }, timeout: timeout);
 
-  test('online name: immediate chankey DM (case-insensitive), nothing '
+  test(
+      'online name: immediate chankey DM (case-insensitive), nothing '
       'armed in config', () async {
     final hub = FakeHub();
     await hub.start();
@@ -225,7 +230,8 @@ void main() {
     expect(readPendingInvites(cfgFile), isEmpty);
   }, timeout: timeout);
 
-  test('poller tick: invitee connects later → chankey DM, joins, keypair '
+  test(
+      'poller tick: invitee connects later → chankey DM, joins, keypair '
       'persisted, pending removed, notice surfaced', () async {
     final hub = FakeHub();
     await hub.start();
@@ -296,7 +302,8 @@ void main() {
     expect(hub.relayed.where((f) => f['to'] == a.agentId), isEmpty);
   }, timeout: timeout);
 
-  test('welcome-time redelivery: a fresh inviter instance delivers '
+  test(
+      'welcome-time redelivery: a fresh inviter instance delivers '
       'without waiting a tick', () async {
     final hub = FakeHub();
     await hub.start();
@@ -344,7 +351,8 @@ void main() {
     expect(readPendingInvites(cfgFile), isEmpty); // consumed after restart
   }, timeout: timeout);
 
-  test('HubPlugin.inviteTo: pending result, invites persisted under '
+  test(
+      'HubPlugin.inviteTo: pending result, invites persisted under '
       '~/.dap/config.json, StateError before start', () async {
     final hub = FakeHub();
     await hub.start();
@@ -359,13 +367,15 @@ void main() {
     await plugin.start();
     // Subscribe before the invite — the join fires during the call.
     final zedJoined = hub.joins
-        .firstWhere((j) => j.agentId == plugin.agentId && j.channel == 'general')
+        .firstWhere(
+            (j) => j.agentId == plugin.agentId && j.channel == 'general')
         .timeout(const Duration(seconds: 5));
 
     final result = await plugin.inviteTo('carol');
     expect(result.ok, isTrue);
     expect(result.pending, isTrue);
-    expect(result.connectLine,
+    expect(
+        result.connectLine,
         'send to carol:  /dap 127.0.0.1:${hub.url.port} carol\n'
         'first connect needs DAP_MASTER_SECRET set (enrolls once, then stored)');
     expect(readPendingInvites('${tmp.path}/.dap/config.json'),

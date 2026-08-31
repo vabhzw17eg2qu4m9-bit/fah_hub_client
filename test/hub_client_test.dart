@@ -92,8 +92,8 @@ void main() {
   test('signed channel send is relayed and decryptable by the other member',
       () async {
     final channelKeys = await X25519().newKeyPair();
-    final channelPub = base64Encode(
-        (await channelKeys.extractPublicKey()).bytes);
+    final channelPub =
+        base64Encode((await channelKeys.extractPublicKey()).bytes);
     final channelPriv =
         base64Encode(await channelKeys.extractPrivateKeyBytes());
 
@@ -121,8 +121,8 @@ void main() {
 
   test('DM round-trip: whois first, then E2E decrypt on the recipient',
       () async {
-    final alice = await connect(hub, await HubIdentity.generate(),
-        backoff: tinyBackoff);
+    final alice =
+        await connect(hub, await HubIdentity.generate(), backoff: tinyBackoff);
     final bob = await connect(hub, await HubIdentity.generate());
 
     final received = bob.inbound
@@ -142,8 +142,8 @@ void main() {
   }, timeout: timeout);
 
   test('reconnect: re-hello and flush re-receives the queued DM', () async {
-    final alice = await connect(hub, await HubIdentity.generate(),
-        backoff: tinyBackoff);
+    final alice =
+        await connect(hub, await HubIdentity.generate(), backoff: tinyBackoff);
     final bob = await connect(hub, await HubIdentity.generate());
 
     // Drop alice's connection hub-side, wait until the hub sees her offline.
@@ -244,13 +244,13 @@ void main() {
 
     final all = await client.peers(includeOffline: true);
     expect(all.map((p) => p.agentId), contains(ghost.agentId));
-    expect(
-        all.firstWhere((p) => p.agentId == ghost.agentId).online, isFalse);
+    expect(all.firstWhere((p) => p.agentId == ghost.agentId).online, isFalse);
 
     await client.disconnect();
   }, timeout: timeout);
 
-  test('retarget/connectTo: bare host + name + room → second welcome, '
+  test(
+      'retarget/connectTo: bare host + name + room → second welcome, '
       'new agentId, lobby joined, retired loop stays retired', () async {
     final hub2 = FakeHub();
     await hub2.start();

@@ -39,9 +39,9 @@ class HubConfig {
     Map<String, String> environment = const {},
   ]) {
     String? scalar(String key) => switch (section[key]) {
-      String s => s,
-      _ => null,
-    };
+          String s => s,
+          _ => null,
+        };
     Map<String, String> stringMap(String key) =>
         (section[key] as Map<String, dynamic>? ?? {})
             .map((k, v) => MapEntry(k, v is String ? v : v.toString()));
@@ -106,7 +106,10 @@ class HubConfig {
       final ch = line[i];
       if (ch == "'" && !inDouble) inSingle = !inSingle;
       if (ch == '"' && !inSingle) inDouble = !inDouble;
-      if (ch == '#' && !inSingle && !inDouble && (i == 0 || line[i - 1] == ' ')) {
+      if (ch == '#' &&
+          !inSingle &&
+          !inDouble &&
+          (i == 0 || line[i - 1] == ' ')) {
         return line.substring(0, i);
       }
     }

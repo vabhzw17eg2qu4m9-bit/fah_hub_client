@@ -8,7 +8,10 @@ void main() {
   test('canonicalJson sorts keys recursively, no whitespace', () {
     final messy = <String, dynamic>{
       'b': 1,
-      'a': <String, dynamic>{'z': 1, 'y': [3, 2]},
+      'a': <String, dynamic>{
+        'z': 1,
+        'y': [3, 2]
+      },
     };
     expect(canonicalJson(messy), '{"a":{"y":[3,2],"z":1},"b":1}');
   });
@@ -27,9 +30,8 @@ void main() {
       utf8.encode('{"nonce":"0011223344556677","op":"hello",'
           '"pubkey":"a2V5","ts":1700000000000,"v":1}'),
     );
-    final hex = digest.bytes
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
+    final hex =
+        digest.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     expect(
       await signingPayload(frame),
       'dap1|hello|1700000000000|$hex',

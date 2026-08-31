@@ -19,16 +19,14 @@ void main() {
     await hub.stop();
   });
 
-  test('PLAIN: after connectTo(name:) the agent still receives DMs',
-      () async {
+  test('PLAIN: after connectTo(name:) the agent still receives DMs', () async {
     final home = await Directory.systemTemp.createTemp('dap_plain');
     addTearDown(() => home.delete(recursive: true));
 
     // A auto-connects under its default (hostname) identity.
     final a = HubClient(
       config: HubConfig(url: hub.url.toString()),
-      identity:
-          await HubIdentity.load('${home.path}/default.key'),
+      identity: await HubIdentity.load('${home.path}/default.key'),
       backoff: tinyBackoff,
     );
     await a.connect();
@@ -91,8 +89,7 @@ void main() {
     await a.connect();
 
     await a.sendDm(b.agentId!, 'must arrive');
-    final inbound =
-        await b.inbound.first.timeout(const Duration(seconds: 3));
+    final inbound = await b.inbound.first.timeout(const Duration(seconds: 3));
     expect(inbound.plaintext, 'must arrive');
 
     await a.disconnect();

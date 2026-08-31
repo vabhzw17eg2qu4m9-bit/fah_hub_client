@@ -36,22 +36,22 @@ final class AgentMessage {
   final int hops;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'fromId': fromId,
-    'toId': toId,
-    'text': text,
-    'sentAt': sentAt,
-    'hops': hops,
-  };
+        'id': id,
+        'fromId': fromId,
+        'toId': toId,
+        'text': text,
+        'sentAt': sentAt,
+        'hops': hops,
+      };
 
   factory AgentMessage.fromJson(Map<String, dynamic> json) => AgentMessage(
-    id: json['id'] as String? ?? '',
-    fromId: json['fromId'] as String? ?? 'unknown',
-    toId: json['toId'] as String? ?? '',
-    text: json['text'] as String? ?? '',
-    sentAt: json['sentAt'] as String? ?? '',
-    hops: json['hops'] as int? ?? 0,
-  );
+        id: json['id'] as String? ?? '',
+        fromId: json['fromId'] as String? ?? 'unknown',
+        toId: json['toId'] as String? ?? '',
+        text: json['text'] as String? ?? '',
+        sentAt: json['sentAt'] as String? ?? '',
+        hops: json['hops'] as int? ?? 0,
+      );
 }
 
 /// One entry in the messaging-fabric directory (upstream shape).

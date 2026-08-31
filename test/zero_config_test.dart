@@ -82,7 +82,8 @@ void main() {
     expect(s.channelsFile, '$root/.dap/channels.json');
   });
 
-  test('auto-keygen: first send persists keys; a second instance picks them '
+  test(
+      'auto-keygen: first send persists keys; a second instance picks them '
       'up, auto-joins, and decrypts', () async {
     final hub = FakeHub();
     await hub.start();
@@ -99,8 +100,8 @@ void main() {
     await a.connect();
 
     // First-ever use of #general: keygen + persist + join, then the send.
-    final joinedGeneral = hub.joins.firstWhere(
-        (j) => j.agentId == a.agentId && j.channel == 'general');
+    final joinedGeneral = hub.joins
+        .firstWhere((j) => j.agentId == a.agentId && j.channel == 'general');
     await a.sendToChannel('general', 'zero config');
     expect((await joinedGeneral).channel, 'general');
 
@@ -118,8 +119,8 @@ void main() {
 
     // Fresh client, same channels file: zero config pickup + auto-join
     // after welcome. (Subscribe the broadcast stream before connecting.)
-    final bJoined = hub.joins.firstWhere(
-        (j) => j.agentId != a.agentId && j.channel == 'general');
+    final bJoined = hub.joins
+        .firstWhere((j) => j.agentId != a.agentId && j.channel == 'general');
     final b = HubClient(
       config: HubConfig(url: hub.url.toString()),
       identity: await HubIdentity.generate(),
@@ -141,7 +142,8 @@ void main() {
     await a.disconnect();
   }, timeout: timeout);
 
-  test('invite: chankey E2E DM auto-persists + joins + notices on the '
+  test(
+      'invite: chankey E2E DM auto-persists + joins + notices on the '
       'steering source; later channel sends decrypt', () async {
     final hub = FakeHub();
     await hub.start();
@@ -170,13 +172,13 @@ void main() {
     await repositoryB.start();
 
     // Invite on a channel A doesn't hold yet: zero-config creation inlined.
-    final aJoined = hub.joins.firstWhere(
-        (j) => j.agentId == a.agentId && j.channel == 'general');
+    final aJoined = hub.joins
+        .firstWhere((j) => j.agentId == a.agentId && j.channel == 'general');
     final notice = b.inbound
         .firstWhere((m) => m.plaintext!.startsWith('[hub] invited'))
         .timeout(const Duration(seconds: 5));
-    final bJoined = hub.joins.firstWhere(
-        (j) => j.agentId == b.agentId && j.channel == 'general');
+    final bJoined = hub.joins
+        .firstWhere((j) => j.agentId == b.agentId && j.channel == 'general');
     await a.inviteTo('general', b.agentId!);
 
     expect((await aJoined).channel, 'general');
@@ -210,7 +212,8 @@ void main() {
     await a.disconnect();
   }, timeout: timeout);
 
-  test('HubPlugin zero-config: no yaml url/keyPath defaults still work — '
+  test(
+      'HubPlugin zero-config: no yaml url/keyPath defaults still work — '
       'fah key dir (mkdir -p, 0600), DAP_CHANNELS_FILE store', () async {
     final hub = FakeHub();
     await hub.start();
@@ -242,9 +245,33 @@ void main() {
     // the welcome.
     expect((await lobbyJoin.timeout(const Duration(seconds: 5))).agentId,
         plugin.agentId);
-    expect(plugin.repository!.client.channelStore?.pubOf('lobby'),
-        lobbyKeys.pub);
+    expect(
+        plugin.repository!.client.channelStore?.pubOf('lobby'), lobbyKeys.pub);
 
     await plugin.dispose();
   }, timeout: timeout);
+
+  test('isDefaultUrl: unresolved counts as default; explicit url does not',
+      () async {
+    final hub = FakeHub();
+    await hub.start();
+    addTearDown(() => hub.stop());
+    final home = await tmpHome('fah-dap-defurl-');
+    addTearDown(() => home.delete(recursive: true));
+
+    // Unresolved (never started) counts as default — hosts keep connect
+    // failures quiet for the zero-config default hub.
+    expect(
+        HubPlugin(environment: const {}, home: home.path).isDefaultUrl, isTrue);
+
+    // An explicitly configured url (here: the yaml `hub:` section) is not
+    // default — its connect failures keep the full error.
+    final plugin = HubPlugin(environment: const {}, home: home.path);
+    plugin.register(PluginContext(config: {
+      'hub': {'url': hub.url.toString(), 'name': 'defurl'},
+    }));
+    await plugin.start();
+    expect(plugin.isDefaultUrl, isFalse);
+    await plugin.dispose();
+  });
 }

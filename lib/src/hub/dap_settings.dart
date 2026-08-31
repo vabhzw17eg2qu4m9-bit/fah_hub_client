@@ -41,12 +41,11 @@ class PendingInvite {
   final String channel;
 
   /// `null` when the entry is not `{name: String, channel: String}`.
-  static PendingInvite? fromJson(Object? raw) => raw is Map &&
-          raw['name'] is String &&
-          raw['channel'] is String
-      ? PendingInvite(
-          name: raw['name'] as String, channel: raw['channel'] as String)
-      : null;
+  static PendingInvite? fromJson(Object? raw) =>
+      raw is Map && raw['name'] is String && raw['channel'] is String
+          ? PendingInvite(
+              name: raw['name'] as String, channel: raw['channel'] as String)
+          : null;
 
   Map<String, String> toJson() => {'name': name, 'channel': channel};
 
@@ -67,8 +66,7 @@ const String defaultDapUrl = 'ws://127.0.0.1:8787/ws';
 /// (`hub.example.com` → `ws://hub.example.com/ws`, `hub:8787` →
 /// `ws://hub:8787/ws`, an explicit `ws(s)://…/path` is kept as-is).
 String normalizeDapHost(String host) {
-  final withScheme =
-      host.startsWith(RegExp(r'wss?://')) ? host : 'ws://$host';
+  final withScheme = host.startsWith(RegExp(r'wss?://')) ? host : 'ws://$host';
   final uri = Uri.parse(withScheme);
   final path = (uri.path.isEmpty || uri.path == '/') ? '/ws' : uri.path;
   return uri.replace(path: path).toString();
@@ -76,9 +74,8 @@ String normalizeDapHost(String host) {
 
 /// The hub address for paste-ready connect lines: scheme and trailing
 /// `/ws` stripped (`ws://h:1/ws` → `h:1`).
-String dapHostOf(String url) => url
-    .replaceFirst(RegExp(r'^wss?://'), '')
-    .replaceFirst(RegExp(r'/ws$'), '');
+String dapHostOf(String url) =>
+    url.replaceFirst(RegExp(r'^wss?://'), '').replaceFirst(RegExp(r'/ws$'), '');
 
 /// `~/.dap/config.json` path — the single authority every reader/writer
 /// of that file goes through ([readDapConfig], [persistDapConfig],
@@ -100,9 +97,7 @@ const String envConfigFile = 'DAP_CONFIG_FILE';
 
 /// `~` on POSIX and Windows alike (dart:io has no homedir).
 String defaultHome([Map<String, String> environment = const {}]) =>
-    environment['HOME'] ??
-    environment['USERPROFILE'] ??
-    Directory.current.path;
+    environment['HOME'] ?? environment['USERPROFILE'] ?? Directory.current.path;
 
 String _withTrailingSlash(String path) => path.endsWith('/') ? path : '$path/';
 
@@ -169,8 +164,8 @@ Future<void> persistDapConfig({
   if (!await target.parent.exists()) {
     await target.parent.create(recursive: true);
   }
-  await target.writeAsString(
-      '${const JsonEncoder.withIndent('  ').convert(next)}\n');
+  await target
+      .writeAsString('${const JsonEncoder.withIndent('  ').convert(next)}\n');
 }
 
 /// Resolves the effective settings (see library doc for precedence).
@@ -192,8 +187,9 @@ DapSettings resolveDapSettings({
     keyPath:
         config.keyPath ?? optStr('keyPath') ?? defaultDapKeyPath(name, root),
     name: name,
-    channelsFile:
-        environment[envChannelsFile] ?? optStr('channelsFile') ?? '${root}.dap/channels.json',
+    channelsFile: environment[envChannelsFile] ??
+        optStr('channelsFile') ??
+        '${root}.dap/channels.json',
   );
 }
 

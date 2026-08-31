@@ -35,7 +35,7 @@ class HubMessagingRepository implements MessagingRepository {
     // frame) still surface — never silent.
     final text = message.plaintext ??
         '[hub] undecryptable message from '
-        '${message.from.isEmpty ? 'unknown' : message.from}';
+            '${message.from.isEmpty ? 'unknown' : message.from}';
     final toId = _inboxIdFor(message);
     _inboxes.putIfAbsent(toId, () => []).add(AgentMessage(
           id: message.id,
@@ -60,7 +60,6 @@ class HubMessagingRepository implements MessagingRepository {
       await client.sendDm(toId, message.text);
     }
   }
-
 
   /// `dap_status` passthrough (see [HubClient.status]): connection state,
   /// identity, known channels, and hello/welcome counters.

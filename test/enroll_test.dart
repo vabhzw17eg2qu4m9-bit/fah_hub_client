@@ -50,8 +50,7 @@ void main() {
     );
     expect(
       resolveDapClientSecret(
-          environment: const {'DAP_MASTER_SECRET': 'master'},
-          config: stored),
+          environment: const {'DAP_MASTER_SECRET': 'master'}, config: stored),
       (token: 'stored', enroll: false),
     );
     expect(
@@ -62,8 +61,10 @@ void main() {
     expect(resolveDapClientSecret(), (token: null, enroll: false));
     // Empty env values count as absent.
     expect(
-      resolveDapClientSecret(
-          environment: const {'DAP_CLIENT_SECRET': '', 'DAP_MASTER_SECRET': 'm'}),
+      resolveDapClientSecret(environment: const {
+        'DAP_CLIENT_SECRET': '',
+        'DAP_MASTER_SECRET': 'm'
+      }),
       (token: 'm', enroll: true),
     );
   }, timeout: timeout);
@@ -119,7 +120,8 @@ void main() {
     }
   }, timeout: timeout);
 
-  test('master-secret dial enrolls once, persists the issued secret, and '
+  test(
+      'master-secret dial enrolls once, persists the issued secret, and '
       'reconnects with it', () async {
     final hub = FakeHub(masterSecret: 'hub-master');
     await hub.start();
@@ -164,7 +166,8 @@ void main() {
     }
   }, timeout: timeout);
 
-  test('HubPlugin: DAP_MASTER_SECRET enrolls once and persists the issued '
+  test(
+      'HubPlugin: DAP_MASTER_SECRET enrolls once and persists the issued '
       'client secret to the injected config', () async {
     final hub = FakeHub(masterSecret: 'hub-master');
     await hub.start();

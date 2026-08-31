@@ -34,6 +34,7 @@ class HubPlugin implements FahPlugin {
   final String? home;
 
   HubConfig _config = const HubConfig();
+  DapSettings? _settings;
   PluginIO? _io;
   HubClient? _client;
   HubMessagingRepository? _repository;
@@ -61,8 +62,9 @@ class HubPlugin implements FahPlugin {
   /// the machine-shared `~/.dap/channels.json`. Idempotent.
   Future<void> start({HubIdentity? identity}) async {
     if (_repository != null) return;
-    final settings =
-        resolveDapSettings(config: _config, environment: environment, home: home);
+    final settings = resolveDapSettings(
+        config: _config, environment: environment, home: home);
+    _settings = settings;
     final configFile = defaultDapConfigFile(home, environment);
     final token = resolveDapClientSecret(
         environment: environment, config: readDapConfig(configFile));
@@ -96,6 +98,13 @@ class HubPlugin implements FahPlugin {
     _invites = invites;
     _io?.writeln('[hub] connected as ${_client!.agentId}');
   }
+
+  /// True when the resolved hub url is still the zero-config default —
+  /// nothing set it via the `hub:` section, env (`DAP_HUB_URL`), or
+  /// `~/.dap/config.json`. Hosts use this to keep connect failures quiet:
+  /// the default hub is usually just not running. Unresolved (never
+  /// started) counts as default.
+  bool get isDefaultUrl => (_settings?.url ?? defaultDapUrl) == defaultDapUrl;
 
   /// Inbound hub mail, drained at every turn boundary. Contract per
   /// upstream: never throws, empty list when nothing arrived.
