@@ -2,9 +2,9 @@
 # Auto-release: bump the patch version, update CHANGELOG.md, commit, tag, push.
 #
 # Runs in CI on pushes to main and the 2h schedule (the `release` job in
-# .github/workflows/ci.yml). The pushed tag triggers the tag-scoped publish
-# job, so this must push with a PAT (checkout token), not GITHUB_TOKEN —
-# GITHUB_TOKEN pushes never trigger downstream runs.
+# .github/workflows/ci.yml). The publish job is chained via needs: on this
+# job's outputs (released/tag), so the default GITHUB_TOKEN is enough —
+# no PAT secret required.
 #
 # Changelog rules:
 # - a curated `## Unreleased` section becomes the new version's notes;
@@ -17,6 +17,9 @@ set -euo pipefail
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+# Emit a job output line when running under Actions (no-op locally).
+out() { if [ -n "${GITHUB_OUTPUT:-}" ]; then printf '%s\n' "$1" >>"$GITHUB_OUTPUT"; fi; }
+
 # Coalescing guards: pub.dev rate-limits publishes (~12/day), so releases are
 # capped at one per 2h; runs with nothing new since the last tag are skipped.
 git fetch origin main --tags --quiet
@@ -24,11 +27,13 @@ last_tag=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | hea
 if [ -n "$last_tag" ]; then
   pending=$(git rev-list --count "$last_tag..origin/main")
   if [ "$pending" -eq 0 ]; then
+    out "released=false"
     echo "Auto-release: nothing new since $last_tag, skipping."
     exit 0
   fi
   tag_age=$(( $(date +%s) - $(git log -1 --format=%ct "$last_tag") ))
   if [ "$tag_age" -lt 7200 ]; then
+    out "released=false"
     echo "Auto-release: coalesced — $last_tag is ${tag_age}s old (<2h); $pending commit(s) pending. Next eligible push or the 2h cron will release them."
     exit 0
   fi
@@ -95,6 +100,8 @@ PY
   # ones stay local. --atomic makes main+tag land together or not at all.
   git tag -a "v$next" -m "Release v$next"
   if git push --atomic origin main --follow-tags; then
+    out "released=true"
+    out "tag=v$next"
     echo "Released v$next"
     exit 0
   fi
