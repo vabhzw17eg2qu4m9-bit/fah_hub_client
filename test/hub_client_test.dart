@@ -262,14 +262,16 @@ void main() {
       config: HubConfig(url: hub.url.toString()),
       identity: await HubIdentity.generate(),
       channelStore: await ChannelStore.fromFile('${home.path}/channels.json'),
-      // long enough that retarget lands while the loop parks in backoff
-      backoff: (int _) => const Duration(milliseconds: 400),
+      // long enough that retarget lands while the loop parks in backoff —
+      // CI runners are slow (keygen + handshake can exceed 400ms), which
+      // once let the parked loop reconnect before retirement (welcome #3)
+      backoff: (int _) => const Duration(seconds: 3),
     );
     await client.connect();
     final firstId = client.agentId!;
     expect(hub.hellosSeen, 1);
 
-    // network drop → the reconnect loop parks in its 400 ms backoff
+    // network drop → the reconnect loop parks in its 3 s backoff
     await hub.closeAgent(firstId);
     await Future<void>.delayed(const Duration(milliseconds: 80));
 
@@ -298,10 +300,13 @@ void main() {
     expect((await keyFile.stat()).modeString(), 'rw-------');
     expect((await HubIdentity.load(keyFile.path)).agentId, result.agentId);
 
-    // the retired loop (asleep when retargeted) must never re-hello:
-    // a live rogue loop would reconnect and bump the count within ms
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    // the retired loop must never re-hello even after its backoff elapses:
+    // wait past the 3s window, then both hubs and the welcome counter must
+    // show exactly one hello/welcome each — a rogue loop bumps one of them
+    await Future<void>.delayed(const Duration(milliseconds: 3300));
+    expect(hub.hellosSeen, 1); // old loop would re-hello the OLD hub
     expect(hub2.hellosSeen, 1);
+    expect(client.status().welcomes, 2);
 
     await client.disconnect();
   }, timeout: timeout);
