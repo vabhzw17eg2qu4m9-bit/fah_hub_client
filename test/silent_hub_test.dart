@@ -27,6 +27,16 @@
 ///   sender resolution via whois() races a `sendDm` to the same peer; the
 ///   map held one completer per target, so the second write orphaned the
 ///   first. FIXED in 0.1.4: per-target waiter lists.
+/// * BUG 5 (fah_hub_client 0.2.0, owner report 2026-08-31) —
+///   `_onPresence` completed `_presenceWaiters` with whatever list ANY
+///   `presence` frame carried: an UNSOLICITED one-agent broadcast (a
+///   join push) landing between the query and its answer drained the
+///   waiters first, so `peers()` returned a one-agent roster. FIXED in
+///   0.2.1: `presence_query` carries a frame id; an ANSWER is recognized
+///   by the hub echoing that id in `replyTo` and completes only the
+///   matching waiters; on a hub known to echo, replyTo-less frames are
+///   broadcasts and complete nothing; legacy hubs (never echo) keep
+///   one-completes-all so old deployments keep working.
 ///
 /// The scripted hub keeps the WebSocket open and ponging in every mode
 /// — only the application-frame routing changes, which is exactly the
@@ -64,6 +74,12 @@ enum HubMode {
 
   /// Answer `presence_query` with an `error` frame. BUG 2.
   errorPresence,
+
+  /// BUG 5 (fah_hub_client 0.2.0, FA repro): an UNSOLICITED one-agent
+  /// presence broadcast is pushed BEFORE the `presence_query` answer —
+  /// the startup race (own join echo / others' join events racing the
+  /// first query). The answer shape follows [SilentHub.echoReplyTo].
+  broadcastBeforeAnswer,
 }
 
 /// Minimal scripted DAP/1 hub: real WebSocket, real handshake, and a
@@ -72,6 +88,15 @@ enum HubMode {
 class SilentHub {
   HttpServer? _server;
   HubMode mode = HubMode.answering;
+
+  /// New-hub wire law (docs/protocol.md §presence): when true,
+  /// `presence_query` answers echo the request frame id in the additive
+  /// string `replyTo`; broadcasts NEVER carry it. Default false = legacy
+  /// hub (no echo anywhere — answers and broadcasts indistinguishable).
+  bool echoReplyTo = false;
+
+  /// The single live client socket (broadcast injection target).
+  WebSocket? _client;
 
   String get url {
     final server = _server!;
@@ -91,7 +116,7 @@ class SilentHub {
   Future<void> _serve() async {
     await for (final request in _server!) {
       if (WebSocketTransformer.isUpgradeRequest(request)) {
-        final ws = await WebSocketTransformer.upgrade(request);
+        final ws = _client = await WebSocketTransformer.upgrade(request);
         ws.listen(
           (dynamic data) => unawaited(_onData(ws, data as String)),
           onDone: () {},
@@ -122,17 +147,21 @@ class SilentHub {
           case HubMode.errorPresence:
             _reply(ws, {'op': 'error', 'code': 'boom', 'msg': 'nope'});
           case HubMode.answering:
-            _reply(ws, {
-              'op': 'presence',
-              'agents': [
-                {
-                  'agentId': '0011223344556677',
-                  'pubkey': pubkey,
-                  'x25519': frame['x25519'] as String? ?? pubkey,
-                  'online': true,
-                },
-              ],
-            });
+            _reply(ws, _presenceAnswer(frame, [selfPeer]));
+          case HubMode.broadcastBeforeAnswer:
+            // The BUG 5 injection: the unsolicited broadcast lands
+            // FIRST (never a replyTo), the real answer SECOND.
+            _reply(
+              ws,
+              {
+                'op': 'presence',
+                'agents': [_peer('1111111111111111')]
+              },
+            );
+            _reply(
+              ws,
+              _presenceAnswer(frame, [selfPeer, _peer('fedcba9876543210')]),
+            );
         }
       case 'whois':
         if (mode == HubMode.silent) return; // swallowed: the bug state
@@ -156,6 +185,41 @@ class SilentHub {
         .map((b) => b.toRadixString(16).padLeft(2, '0'))
         .join()
         .substring(0, 16);
+  }
+
+  /// The client's own roster entry as the scripted hub reports it.
+  static Map<String, dynamic> get selfPeer => _peer('0011223344556677');
+
+  static Map<String, dynamic> _peer(String agentId) => {
+        'agentId': agentId,
+        'pubkey': pubkey,
+        'x25519': pubkey,
+        'online': true,
+      };
+
+  /// `presence` answer to [query]: echoes the request id in `replyTo`
+  /// only when this hub speaks the echo contract (and the query had an
+  /// id — omitempty per the wire law, so old clients get no field).
+  Map<String, dynamic> _presenceAnswer(
+    Map<String, dynamic> query,
+    List<Map<String, dynamic>> agents,
+  ) =>
+      {
+        'op': 'presence',
+        'agents': agents,
+        if (echoReplyTo && query['id'] != null) 'replyTo': query['id'],
+      };
+
+  /// Pushes an UNSOLICITED one-agent presence broadcast (a join/leave
+  /// push — carries NO replyTo by wire law) to the connected client.
+  void pushPresence(String agentId) {
+    final ws = _client;
+    if (ws != null) {
+      _reply(ws, {
+        'op': 'presence',
+        'agents': [_peer(agentId)]
+      });
+    }
   }
 
   // A syntactically valid base64 blob standing in for peer keys — the
@@ -326,6 +390,79 @@ void main() {
       expect(await bounded(first, limit), 'completed');
       expect(firstInfo!.agentId, target);
       expect(secondInfo!.agentId, target);
+    },
+  );
+
+  test(
+    'BUG 5: an unsolicited presence broadcast must not steal the '
+    'pending query answer (broadcast-before-answer startup race)',
+    timeout: timeout,
+    () async {
+      final hub = SilentHub();
+      await hub.start();
+      hub.echoReplyTo = true; // new hub: answers echo the request id
+      final client = await connectTo(hub);
+      addTearDown(client.disconnect);
+      addTearDown(hub.stop);
+
+      // Steady state: one clean echoed query teaches the client that
+      // this hub speaks the replyTo contract. (Until its first echo a
+      // new hub is wire-indistinguishable from a legacy one — the
+      // residual first-query window documented in hub_client.dart.)
+      await client.presenceQuery();
+
+      // The raced query: the hub pushes a one-agent join broadcast
+      // BEFORE the real two-agent answer (FA's BUG 5 injection order).
+      hub.mode = HubMode.broadcastBeforeAnswer;
+      List<AgentInfo>? raced;
+      await bounded(
+        client.peers().then((v) => raced = v),
+        limit,
+      );
+      expect(
+        raced!.map((a) => a.agentId),
+        // BOTH agents of the ANSWER. ['1111111111111111'] alone would
+        // be the broadcast having stolen the waiter (0.2.0 behavior).
+        ['0011223344556677', 'fedcba9876543210'],
+      );
+    },
+  );
+
+  test(
+    'broadcast-only presence with no answer must NOT feed the waiter '
+    '(errored by the request cap, never completed by the push)',
+    timeout: timeout,
+    () async {
+      final hub = SilentHub();
+      await hub.start();
+      hub.echoReplyTo = true;
+      final client = await connectTo(hub);
+      addTearDown(client.disconnect);
+      addTearDown(hub.stop);
+      await client.presenceQuery(); // latch: hub known to echo
+
+      hub.mode = HubMode.silent; // the raced query gets NO answer
+      final outcome = bounded(client.peers(), limit);
+      hub.pushPresence('1111111111111111'); // unsolicited push, no replyTo
+      expect(client.status().connected, isTrue);
+      expect(await outcome, 'errored');
+    },
+  );
+
+  test(
+    'legacy hub: a presence answer WITHOUT replyTo still completes '
+    '(pre-replyTo deployments keep working)',
+    timeout: timeout,
+    () async {
+      final hub = SilentHub(); // echoReplyTo stays false: legacy wire
+      await hub.start();
+      final client = await connectTo(hub);
+      addTearDown(client.disconnect);
+      addTearDown(hub.stop);
+
+      List<AgentInfo>? roster;
+      await bounded(client.peers().then((v) => roster = v), limit);
+      expect(roster!.map((a) => a.agentId), contains('0011223344556677'));
     },
   );
 }

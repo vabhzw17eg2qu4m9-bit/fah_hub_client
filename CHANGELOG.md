@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed the owner-reported presence race (bug 2026-08-31, FA "BUG 5"):
+  an UNSOLICITED `presence` broadcast completing a pending
+  `presence_query` waiter made `peers()` return ONLY the broadcast's
+  agent instead of the answer's roster. `presenceQuery()` now sends a
+  frame id; per the hub `replyTo` contract (additive, docs/protocol.md
+  §presence) an ANSWER echoes that id in `replyTo` and completes only
+  the matching waiters — concurrent queries keep their own ids. On a
+  hub known to echo, replyTo-less `presence` frames are broadcasts and
+  never complete waiters. Legacy hubs (no echo) keep the 0.1.4
+  one-completes-all answer path — old deployments keep working; the
+  residual window (a broadcast racing the FIRST query to a new hub,
+  before any echo is seen) is documented on `HubClient._onPresence`.
+
 ## 0.2.0
 
 - BREAKING (owner decision 2026-08-31): `peers()` takes NO parameters —

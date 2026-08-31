@@ -144,6 +144,14 @@ typedef InviteResult = ({
   String? error,
 });
 
+/// One pending `presence_query` caller: the frame id sent with the query
+/// (`{"op":"presence_query","id":...}`) and the completer that the answer
+/// — the `presence` frame echoing that id in `replyTo` — completes.
+typedef _PresenceWaiter = ({
+  String requestId,
+  Completer<List<AgentInfo>> completer,
+});
+
 class HubClient {
   HubClient({
     required HubConfig config,
@@ -234,7 +242,18 @@ class HubClient {
   /// poller vs a tool's resolve, an inbound-DM whois vs a sendDm) can
   /// never clobber an earlier one — 0.1.3's single slots orphaned it.
   final _flushWaiters = <Completer<int>>[];
-  final _presenceWaiters = <Completer<List<AgentInfo>>>[];
+
+  /// Pending `presence_query` callers, each with the frame id its answer
+  /// must echo in `replyTo` (see [_onPresence] for the matching rule).
+  final _presenceWaiters = <_PresenceWaiter>[];
+
+  /// Whether this hub has EVER echoed `replyTo` on a presence frame —
+  /// sticky for the client's lifetime (survives reconnects, which is
+  /// where the startup race recurs). Once set, a replyTo-less presence
+  /// frame is a known broadcast and never completes waiters; a hub that
+  /// never echoes stays on the legacy one-completes-all path.
+  bool _replyToEchoSeen = false;
+
   final _pendingWhois = <String, List<Completer<AgentInfo>>>{};
   final _whoisCache = <String, AgentInfo>{};
 
@@ -713,14 +732,22 @@ class HubClient {
     );
   }
 
+  /// Sends `presence_query` with a fresh frame id; the hub's ANSWER
+  /// echoes that id in `replyTo` and completes this caller only
+  /// (docs/protocol.md §presence — see [_onPresence] for the full
+  /// matching rule, legacy hubs included). [requestTimeout] caps the
+  /// door either way.
   Future<List<AgentInfo>> presenceQuery() {
-    final completer = Completer<List<AgentInfo>>();
-    _presenceWaiters.add(completer);
-    _send({'op': 'presence_query'});
+    final waiter = (
+      requestId: newFrameId(),
+      completer: Completer<List<AgentInfo>>(),
+    );
+    _presenceWaiters.add(waiter);
+    _send({'op': 'presence_query', 'id': waiter.requestId});
     return _withTimeout(
-      completer.future,
+      waiter.completer.future,
       'presence_query',
-      () => _presenceWaiters.remove(completer),
+      () => _presenceWaiters.remove(waiter),
     );
   }
 
@@ -922,12 +949,40 @@ class HubClient {
     }
   }
 
+  /// Presence frame routing — the waiter matching rule (docs/protocol.md
+  /// §presence):
+  ///
+  /// * `replyTo` present: an ANSWER to our `presence_query` — the hub
+  ///   echoes the request frame id. Completes EXACTLY the waiters whose
+  ///   request id matches (fan-out included); concurrent queries carry
+  ///   their own ids and stay pending for their own echo. A late echo
+  ///   for an already-timed-out query matches nobody: dropped.
+  /// * `replyTo` absent on a hub KNOWN to echo (any echo seen before):
+  ///   an unsolicited broadcast push (join/leave). Never completes
+  ///   waiters — that is the BUG 5 race (a one-agent broadcast drained
+  ///   pending waiters, so `peers()` returned a one-agent roster). No
+  ///   presence roster cache is kept, so the frame is dropped.
+  /// * `replyTo` absent on a hub never seen to echo (legacy): answers
+  ///   and broadcasts share one indistinguishable frame shape, so the
+  ///   0.1.4 one-completes-all semantics stay — the frame completes
+  ///   every current waiter (old hubs keep working). Residual window: a
+  ///   broadcast racing the FIRST query to a new hub, before any echo
+  ///   is seen, can still steal it; every later query is protected.
   void _onPresence(Map<String, dynamic> frame) {
     final agents = (frame['agents'] as List? ?? [])
         .map((raw) => _infoFrom((raw as Map).cast<String, dynamic>()))
         .toList();
-    for (final waiter in _drain(_presenceWaiters)) {
-      if (!waiter.isCompleted) waiter.complete(agents);
+    final replyTo = frame['replyTo'];
+    if (replyTo is String && replyTo.isNotEmpty) {
+      _replyToEchoSeen = true;
+      for (final waiter in _drainPresence((w) => w.requestId == replyTo)) {
+        if (!waiter.completer.isCompleted) waiter.completer.complete(agents);
+      }
+      return;
+    }
+    if (_replyToEchoSeen) return; // known-echoing hub: broadcast push
+    for (final waiter in _drainPresence((_) => true)) {
+      if (!waiter.completer.isCompleted) waiter.completer.complete(agents);
     }
   }
 
@@ -964,12 +1019,25 @@ class HubClient {
     return pending;
   }
 
+  /// [_drain]'s guard for presence waiters: detaches the matching entries
+  /// before completing them, so a caller registering mid-iteration is
+  /// never hit by an answer already delivered.
+  List<_PresenceWaiter> _drainPresence(
+    bool Function(_PresenceWaiter waiter) test,
+  ) {
+    final matched = _presenceWaiters.where(test).toList();
+    _presenceWaiters.removeWhere(test);
+    return matched;
+  }
+
   /// Fails the pending flush/presence doors with [error] and frees their
   /// slots — shared by [_onError] (hub answered with an error frame) and
   /// [_failPending] (connection-level teardown).
   void _failFlushPresence(Object error) {
     _failAll(_flushWaiters, error);
-    _failAll(_presenceWaiters, error);
+    for (final waiter in _drainPresence((_) => true)) {
+      if (!waiter.completer.isCompleted) waiter.completer.completeError(error);
+    }
   }
 
   /// Fan-out failure: every waiter of a door gets [error], list emptied.
