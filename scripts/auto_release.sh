@@ -102,6 +102,13 @@ PY
   if git push --atomic origin main --follow-tags; then
     out "released=true"
     out "tag=v$next"
+    # GitHub Release page for the tag (GITHUB_TOKEN suffices — creating a
+    # release is not a push event and triggers no recursion). Notes are
+    # commit-derived; CHANGELOG.md stays the curated source.
+    if command -v gh >/dev/null 2>&1; then
+      gh release create "v$next" --title "v$next" --generate-notes || \
+        echo "WARN: gh release create failed (tag exists; release page skipped)"
+    fi
     echo "Released v$next"
     exit 0
   fi

@@ -114,9 +114,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Bump version, changelog, tag and push
+      - name: Bump version, changelog, tag, push and open GitHub Release
         id: rel
         run: bash scripts/auto_release.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     name: Publish to pub.dev
