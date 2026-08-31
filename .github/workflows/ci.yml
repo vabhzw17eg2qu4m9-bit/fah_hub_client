@@ -37,6 +37,12 @@ jobs:
             -exec sh -c 'lines=$(wc -l < "$1"); if [ "$lines" -gt 2800 ]; then echo "$1: $lines lines"; fi' _ {} \;)
           if [ -n "$violations" ]; then echo "$violations"; exit 1; fi
 
+      - name: Static analysis
+        run: dart analyze --fatal-infos
+
+      - name: Run tests with coverage
+        run: dart test --coverage=coverage
+
       - name: Format coverage to lcov
         run: dart run coverage:format_coverage --lcov -i coverage -o coverage/lcov.info --report-on=lib
 
