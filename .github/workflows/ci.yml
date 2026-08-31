@@ -156,13 +156,19 @@ jobs:
       # (Google OAuth) — skip green with the exact bootstrap command until
       # the package exists, then automated publishing takes over.
       - name: First-publish bootstrap guard
+        id: bootstrap
         run: |
-          if ! curl -sf https://pub.dev/api/packages/fah_hub_client >/dev/null; then
+          if curl -sf https://pub.dev/api/packages/fah_hub_client >/dev/null; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Package fah_hub_client is not on pub.dev yet."
-            echo "Bootstrap once: clone, checkout ${{ needs.release.outputs.tag || github.ref_name }}, run 'dart pub publish' (Google OAuth)."
-            echo "Then optionally enable automated publishing: https://pub.dev/packages/fah_hub_client/admin"
-            exit 0
+            echo "pub.dev requires the first upload of a new package to be interactive:"
+            echo "  git clone https://github.com/vabhzw17eg2qu4m9-bit/fah_hub_client && cd fah_hub_client"
+            echo "  git checkout ${{ needs.release.outputs.tag || github.ref_name }} && dart pub publish"
+            echo "Then automated publishing (OIDC) takes over for every later tag."
           fi
 
       - name: Publish (automated publishing via OIDC)
+        if: steps.bootstrap.outputs.skip != 'true'
         run: dart pub publish --force
