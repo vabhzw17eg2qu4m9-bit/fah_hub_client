@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2
+
+- Ported FA review fixes (db65522): `HubIdentity.load` warns loudly and
+  returns false when the key file cannot be locked to mode 0600
+  (injectable `setPrivateMode`/`warn`); HKDF honors the RFC 5869
+  255-block cap; `HubPlugin.isDefaultUrl` lets hosts keep zero-config
+  default-hub connect failures quiet.
+- Whole-tree `dart format`; CI gained a `dart format` gate.
+
 ## 0.1.1
 
 
