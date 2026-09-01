@@ -405,6 +405,7 @@ class HubClient {
       if (!_firstWelcome.isCompleted) _firstWelcome.complete(agentId);
       await _joinKnownChannels();
       await _flushAfterWelcome();
+      await _warmUpPresence();
       if (!_welcomeEvents.isClosed) _welcomeEvents.add(null);
     }
     await done.future;
@@ -743,7 +744,13 @@ class HubClient {
       completer: Completer<List<AgentInfo>>(),
     );
     _presenceWaiters.add(waiter);
-    _send({'op': 'presence_query', 'id': waiter.requestId});
+    try {
+      _send({'op': 'presence_query', 'id': waiter.requestId});
+    } on Object {
+      // never answered — don't leak a listener-less waiter (whois pattern)
+      _presenceWaiters.remove(waiter);
+      rethrow;
+    }
     return _withTimeout(
       waiter.completer.future,
       'presence_query',
@@ -760,6 +767,25 @@ class HubClient {
       for (final agent in await presenceQuery())
         if (agent.online) agent.agentId == me ? agent.asSelf() : agent,
     ];
+  }
+
+  /// Welcome-time warm-up (every fresh connection): a throwaway
+  /// `presence_query` whose only job is to make the hub echo `replyTo`,
+  /// arming [_replyToEchoSeen] BEFORE any consumer query — without it
+  /// the startup join self-echo (a replyTo-less broadcast) can drain
+  /// the first query's waiter with a one-agent roster. Up to 2 retries
+  /// while still unarmed; a legacy hub answers without `replyTo`, so
+  /// the latch stays unarmed and the one-completes-all path stays. The
+  /// result is discarded; errors are swallowed — a reconnect re-runs
+  /// this after the next welcome.
+  Future<void> _warmUpPresence() async {
+    for (var left = 3; left > 0 && !_replyToEchoSeen; left--) {
+      try {
+        await presenceQuery();
+      } on Object {
+        return; // silent/erroring hub or mid-warm-up drop
+      }
+    }
   }
 
   /// Snapshot for the `dap_status` tool — safe to call any time, also
@@ -965,9 +991,10 @@ class HubClient {
   /// * `replyTo` absent on a hub never seen to echo (legacy): answers
   ///   and broadcasts share one indistinguishable frame shape, so the
   ///   0.1.4 one-completes-all semantics stay — the frame completes
-  ///   every current waiter (old hubs keep working). Residual window: a
-  ///   broadcast racing the FIRST query to a new hub, before any echo
-  ///   is seen, can still steal it; every later query is protected.
+  ///   every current waiter (old hubs keep working). The welcome-time
+  ///   warm-up ([_warmUpPresence]) fires a throwaway echoed query on
+  ///   every fresh connection, arming the latch before any consumer
+  ///   query — the first-query steal window is closed.
   void _onPresence(Map<String, dynamic> frame) {
     final agents = (frame['agents'] as List? ?? [])
         .map((raw) => _infoFrom((raw as Map).cast<String, dynamic>()))

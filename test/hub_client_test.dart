@@ -226,7 +226,9 @@ void main() {
     final client = await connect(hub, await HubIdentity.generate());
     final peer = await connect(hub, await HubIdentity.generate());
     final ghost = await connect(hub, await HubIdentity.generate());
+    final ghostGone = hub.agentOffline.firstWhere((id) => id == ghost.agentId);
     await ghost.disconnect(); // registered but gone → offline in presence
+    await ghostGone; // hub cleaned up its connection row
 
     final peers = await client.peers();
     expect(peers.map((p) => p.agentId),
@@ -243,7 +245,9 @@ void main() {
   test('peers: drops offline agents the raw roster still lists', () async {
     final client = await connect(hub, await HubIdentity.generate());
     final ghost = await connect(hub, await HubIdentity.generate());
+    final ghostGone = hub.agentOffline.firstWhere((id) => id == ghost.agentId);
     await ghost.disconnect();
+    await ghostGone; // roster query must see the post-cleanup registry
 
     final roster = await client.presenceQuery();
     expect(roster.map((p) => p.agentId), contains(ghost.agentId));

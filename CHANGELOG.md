@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.2
+
+- Closed 0.2.1's residual first-query steal window: `HubClient` now
+  fires a welcome-time warm-up `presence_query` on EVERY fresh
+  connection — a throwaway whose only job is to make the hub echo
+  `replyTo` and arm the echo-seen latch BEFORE any consumer query, so
+  the startup join self-echo (a replyTo-less broadcast) can no longer
+  drain the first `peers()` with a one-agent roster. Up to 2 retries
+  while the latch is still unarmed; legacy hubs (answers without
+  `replyTo`) leave the latch unarmed and keep the one-completes-all
+  path; a reconnect re-runs the warm-up (a no-op once armed — the
+  latch stays client-lifetime). The warm-up result is discarded and
+  send failures clean up their waiter (the whois pattern — a
+  listener-less pending completer could surface as an unhandled
+  async error at teardown). Value contract for concurrent user
+  queries unchanged.
+
 ## 0.2.1
 
 - Fixed the owner-reported presence race (bug 2026-08-31, FA "BUG 5"):

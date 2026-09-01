@@ -20,7 +20,7 @@ or in `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  fah_hub_client: ^0.1.0
+  fah_hub_client: ^0.2.0
 ```
 
 ## Usage
@@ -52,9 +52,12 @@ Zero-config by default; resolution order is environment > `~/.dap/config.json`
 | `DAP_AGENT_NAME`    | Display name / identity       |
 | `DAP_KEY_PATH`      | Signing key file              |
 | `DAP_CHANNELS_FILE` | Channel store location        |
+| `DAP_CONFIG_FILE`   | Config file location (default `~/.dap/config.json`) |
+| `DAP_MASTER_SECRET` | Hub master secret — first-connect enrollment |
+| `DAP_CLIENT_SECRET` | Hub-issued client secret (or enrolled once via master; also `clientSecret` in config) |
 
 First connect to a new hub needs `DAP_MASTER_SECRET` set (enrolls once, then
-the client secret is stored in `~/.dap/config.json`).
+the issued client secret is stored in `~/.dap/config.json`).
 
 ## Protocol
 

@@ -98,6 +98,9 @@ class SilentHub {
   /// The single live client socket (broadcast injection target).
   WebSocket? _client;
 
+  /// `presence_query` frames seen — the warm-up re-run proof.
+  int presenceQueries = 0;
+
   String get url {
     final server = _server!;
     return 'ws://127.0.0.1:${server.port}/ws';
@@ -141,6 +144,7 @@ class SilentHub {
         final pubkey = frame['pubkey'] as String;
         _reply(ws, {'op': 'welcome', 'agentId': await _agentIdFor(pubkey)});
       case 'presence_query':
+        presenceQueries++;
         switch (mode) {
           case HubMode.silent:
             return; // swallowed: the bug state
@@ -220,6 +224,11 @@ class SilentHub {
         'agents': [_peer(agentId)]
       });
     }
+  }
+
+  /// Force-drops the client socket (network-drop simulation).
+  Future<void> dropClient() async {
+    await _client?.close();
   }
 
   // A syntactically valid base64 blob standing in for peer keys — the
@@ -425,6 +434,59 @@ void main() {
         // be the broadcast having stolen the waiter (0.2.0 behavior).
         ['0011223344556677', 'fedcba9876543210'],
       );
+    },
+  );
+
+  test(
+    'warm-up: the connect-time throwaway query arms the latch, so the '
+    'first consumer query is never stolen by a join broadcast',
+    timeout: timeout,
+    () async {
+      final hub = SilentHub();
+      await hub.start();
+      hub.echoReplyTo = true;
+      // Every query gets a one-agent broadcast BEFORE its answer —
+      // with the latch unarmed that broadcast steals the waiter
+      // (0.2.1's residual first-query window).
+      hub.mode = HubMode.broadcastBeforeAnswer;
+      final client = await connectTo(hub);
+      addTearDown(client.disconnect);
+      addTearDown(hub.stop);
+      await client.welcomeEvents.first; // warm-up done, latch armed
+
+      // A post-arm unsolicited one-agent broadcast is ignored...
+      hub.pushPresence('aabbccddeeff0011');
+      // ...and the user's FIRST query on this connection gets the full
+      // ANSWER roster, not the broadcast's single agent.
+      List<AgentInfo>? roster;
+      await bounded(client.peers().then((v) => roster = v), limit);
+      expect(
+        roster!.map((a) => a.agentId),
+        ['0011223344556677', 'fedcba9876543210'],
+      );
+    },
+  );
+
+  test(
+    'warm-up re-runs after every welcome (reconnect re-arms an unarmed '
+    'latch)',
+    timeout: timeout,
+    () async {
+      final hub = SilentHub();
+      await hub.start();
+      hub.mode = HubMode.silent; // first connection cannot arm the latch
+      final client = await connectTo(hub);
+      addTearDown(client.disconnect);
+      addTearDown(hub.stop);
+      await client.welcomeEvents.first;
+      expect(hub.presenceQueries, 1); // warm-up fired; silent: unarmed
+      final before = hub.presenceQueries;
+
+      hub.mode = HubMode.answering;
+      hub.echoReplyTo = true;
+      await hub.dropClient();
+      await client.welcomeEvents.first; // second welcome: warm-up re-runs
+      expect(hub.presenceQueries, greaterThan(before)); // armed this time
     },
   );
 
