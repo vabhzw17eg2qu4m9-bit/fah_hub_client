@@ -199,6 +199,19 @@ class HubPlugin implements FahPlugin {
     return repository.peers();
   }
 
+  /// dap_send to a channel (see [HubClient.sendToChannel]): E2E-encrypted
+  /// message to every member of [channel] under the channel pubkey —
+  /// zero-config keygen + join on the first send to an unknown channel,
+  /// honest failure (throws when not connected). Same registerTool
+  /// pattern as [status].
+  Future<void> sendToChannel(String channel, String text) async {
+    final repository = _repository;
+    if (repository == null) {
+      throw StateError('plugin not started — call start() first');
+    }
+    return repository.sendToChannel(channel, text);
+  }
+
   /// Our hub agent id once connected.
   String? get agentId => _client?.agentId;
 

@@ -613,6 +613,8 @@ class HubClient {
     }
   }
 
+  /// E2E-encrypted send to every member of [channel] under the channel
+  /// pubkey; the first send to an unknown channel auto-keygens + joins.
   Future<void> sendToChannel(String channel, String text) async {
     final pubkeyB64 = await _channelPubFor(channel);
     await _sendEncrypted(

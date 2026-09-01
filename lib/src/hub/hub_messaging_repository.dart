@@ -76,6 +76,12 @@ class HubMessagingRepository implements MessagingRepository {
           {String? name, String? channel, String? home}) =>
       client.connectTo(host, name: name, channel: channel, home: home);
 
+  /// dap channel send passthrough (see [HubClient.sendToChannel]):
+  /// E2E-encrypted message to every member of [channel]; zero-config
+  /// keygen + join on the first send to an unknown channel.
+  Future<void> sendToChannel(String channel, String text) =>
+      client.sendToChannel(channel, text);
+
   @override
   Future<void> register(String agentId) => start();
 
