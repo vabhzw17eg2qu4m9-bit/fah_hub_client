@@ -127,4 +127,8 @@
   `~/.dap/config.json` > defaults; identity auto-created at
   `~/.dap/keys/fah/<name>.key`.
 
+## 0.2.5
+
+- feat(plugin): public sendToChannel — channel-send parity with omp's dap_send
+
 ## Unreleased
