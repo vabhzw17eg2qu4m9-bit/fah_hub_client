@@ -45,6 +45,7 @@ class AgentInfo {
     this.signingPubkeyB64,
     this.dhPublicKey,
     this.self = false,
+    this.lastSeen,
   });
 
   final String agentId;
@@ -60,6 +61,10 @@ class AgentInfo {
   /// marks it); raw presence/whois entries are always false.
   final bool self;
 
+  /// Hub-reported last authenticated inbound frame time (v0.3.1+ hubs;
+  /// activity-accurate). Null on legacy hubs — never treat null as stale.
+  final DateTime? lastSeen;
+
   /// Copy of this entry flagged as our own ([self] = true).
   AgentInfo asSelf() => AgentInfo(
         agentId: agentId,
@@ -68,6 +73,7 @@ class AgentInfo {
         signingPubkeyB64: signingPubkeyB64,
         dhPublicKey: dhPublicKey,
         self: true,
+        lastSeen: lastSeen,
       );
 }
 
@@ -1077,12 +1083,16 @@ class HubClient {
 
   AgentInfo _infoFrom(Map<String, dynamic> frame) {
     final dhB64 = frame['x25519'] as String?;
+    final lastSeenMs = frame['lastSeen'] as int?;
     return AgentInfo(
       agentId: frame['agentId'] as String,
       name: frame['name'] as String?,
       online: frame['online'] as bool? ?? false,
       signingPubkeyB64: frame['pubkey'] as String?,
       dhPublicKey: (dhB64 == null || dhB64.isEmpty) ? null : _dhPubkey(dhB64),
+      lastSeen: lastSeenMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(lastSeenMs, isUtc: true),
     );
   }
 

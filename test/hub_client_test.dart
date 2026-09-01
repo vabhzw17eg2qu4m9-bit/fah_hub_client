@@ -189,6 +189,39 @@ void main() {
     await bob.disconnect();
   }, timeout: timeout);
 
+  test('presence lastSeen parses to a UTC DateTime and survives asSelf',
+      () async {
+    final alice = await connect(hub, await HubIdentity.generate());
+    final floor = DateTime.now().toUtc().subtract(const Duration(seconds: 5));
+
+    final agents = await alice.presenceQuery();
+    final seen = agents.firstWhere((a) => a.agentId == alice.agentId).lastSeen;
+    expect(seen, isNotNull);
+    expect(seen!.isUtc, isTrue);
+    expect(seen.isAfter(floor), isTrue);
+
+    // asSelf keeps the hub-reported activity (peers() self entry).
+    final self = (await alice.peers()).firstWhere(
+      (p) => p.agentId == alice.agentId,
+    );
+    expect(self.lastSeen, isNotNull);
+
+    await alice.disconnect();
+  }, timeout: timeout);
+
+  test('legacy hub: roster without lastSeen parses to null', () async {
+    hub.emitLastSeen = false; // wire `omitempty` on pre-0.3.1 hubs
+    final alice = await connect(hub, await HubIdentity.generate());
+
+    final agents = await alice.presenceQuery();
+    expect(
+      agents.firstWhere((a) => a.agentId == alice.agentId).lastSeen,
+      isNull,
+    );
+
+    await alice.disconnect();
+  }, timeout: timeout);
+
   test('status: connected, identity, url, known channels, counters', () async {
     final client = HubClient(
       config: HubConfig(url: hub.url.toString(), channels: {'general': 'AA'}),

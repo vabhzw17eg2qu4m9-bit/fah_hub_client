@@ -136,6 +136,25 @@ void main() {
       'directory-probe',
     );
 
+    // Online roster entry: live, with hub-reported activity.
+    final mine = entries.firstWhere((e) => e.id == client.agentId);
+    expect(mine.isLive, isTrue);
+    expect(mine.lastActivity, isNotNull);
+
+    // Offline roster entry: still listed, never hidden, but not live.
+    final ghost = HubClient(
+      config: HubConfig(url: hub.url.toString()),
+      identity: await HubIdentity.generate(),
+    );
+    await ghost.connect();
+    final gone = hub.agentOffline.firstWhere((id) => id == ghost.agentId);
+    await ghost.disconnect();
+    await gone; // hub cleaned up its connection row
+    final after = await repository.directory();
+    final offline = after.firstWhere((e) => e.id == ghost.agentId);
+    expect(offline.isLive, isFalse);
+    expect(offline.lastActivity, isNotNull);
+
     await repository.dispose();
   }, timeout: timeout);
 

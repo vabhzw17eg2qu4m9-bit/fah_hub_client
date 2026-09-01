@@ -61,6 +61,10 @@ class FakeHub {
   final _helloEvents = StreamController<String>.broadcast();
   int _hellosSeen = 0;
 
+  /// False emulates a legacy hub whose presence roster omits `lastSeen`
+  /// (wire `omitempty`): clients must parse the absent key as null.
+  bool emitLastSeen = true;
+
   int get hellosSeen => _hellosSeen;
 
   int rejectedHellos = 0;
@@ -236,6 +240,7 @@ class FakeHub {
       pubkeyB64: pubkeyB64,
       x25519B64: frame['x25519'] as String? ?? '',
       name: frame['name'] as String?,
+      lastSeenMs: DateTime.now().millisecondsSinceEpoch,
     );
     _conns[agentId] = ws;
     _hellosSeen++;
@@ -422,6 +427,7 @@ class FakeHub {
             'name': entry.value.name,
             'online': _conns.containsKey(entry.key),
             'x25519': entry.value.x25519B64,
+            if (emitLastSeen) 'lastSeen': entry.value.lastSeenMs,
           },
       ],
     });
@@ -433,11 +439,20 @@ class FakeHub {
 }
 
 class _RegistryEntry {
-  _RegistryEntry({required this.pubkeyB64, required this.x25519B64, this.name});
+  _RegistryEntry({
+    required this.pubkeyB64,
+    required this.x25519B64,
+    this.name,
+    required this.lastSeenMs,
+  });
 
   final String pubkeyB64;
   final String x25519B64;
   final String? name;
+
+  /// Hub wall-clock ms of the agent's last accepted hello (fake stand-in
+  /// for the real hub's last-authenticated-inbound-frame tracking).
+  final int lastSeenMs;
 }
 
 /// One accepted `join` (spec § join).

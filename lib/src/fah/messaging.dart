@@ -56,7 +56,8 @@ final class AgentMessage {
 
 /// One entry in the messaging-fabric directory (upstream shape).
 class MailboxEntry {
-  const MailboxEntry({required this.id, this.cwd, this.slug});
+  const MailboxEntry(
+      {required this.id, this.cwd, this.slug, this.isLive, this.lastActivity});
 
   /// The mailbox id (e.g. an agent id).
   final String id;
@@ -66,6 +67,18 @@ class MailboxEntry {
 
   /// The session slug this mailbox belongs to, when known.
   final String? slug;
+
+  /// Source-defined liveness — a hub-backed repository fills these from
+  /// the hub presence roster (online flag + hub lastSeen); a file-backed
+  /// repository fills them from mailbox mtimes. NEVER compared across
+  /// sources. Null = unknown — entries with null activity are never hidden.
+  final bool? isLive;
+
+  /// Source-defined liveness — a hub-backed repository fills these from
+  /// the hub presence roster (online flag + hub lastSeen); a file-backed
+  /// repository fills them from mailbox mtimes. NEVER compared across
+  /// sources. Null = unknown — entries with null activity are never hidden.
+  final DateTime? lastActivity;
 
   @override
   String toString() => 'MailboxEntry($id, cwd: $cwd, slug: $slug)';

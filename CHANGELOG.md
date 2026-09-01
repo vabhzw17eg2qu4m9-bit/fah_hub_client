@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.4
+
+- Additive liveness surface for the messaging fabric. `AgentInfo.lastSeen`
+  (DateTime?, null on legacy hubs — never treat null as stale) parses the
+  hub roster's activity-accurate `lastSeen` (dap v0.3.1+; bumped per
+  authenticated inbound frame instead of frozen at connect time).
+  `MailboxEntry.isLive` (bool?) + `MailboxEntry.lastActivity` (DateTime?)
+  carry SOURCE-DEFINED semantics — a hub-backed repository fills them from
+  the roster (online flag + hub lastSeen), a file-backed repository from
+  mailbox mtimes; NEVER compare across sources; null = unknown = never
+  hidden. `HubMessagingRepository.directory()` populates both so downstream
+  fabrics (flutter_agent_harness agent_directory) consume one authoritative
+  type instead of patching a local copy.
+
 ## 0.2.3
 
 - 401 self-recovery for a stale persisted client secret (live incident

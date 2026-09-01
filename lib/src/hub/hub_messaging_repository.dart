@@ -92,7 +92,12 @@ class HubMessagingRepository implements MessagingRepository {
     final agents = await client.presenceQuery();
     return [
       for (final agent in agents)
-        MailboxEntry(id: agent.agentId, slug: agent.name),
+        MailboxEntry(
+          id: agent.agentId,
+          slug: agent.name,
+          isLive: agent.online,
+          lastActivity: agent.lastSeen,
+        ),
     ];
   }
 
