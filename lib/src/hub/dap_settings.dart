@@ -131,18 +131,22 @@ List<PendingInvite> readPendingInvites(String file) {
 }
 
 /// Read-modify-write of `~/.dap/config.json` (dap_connect persistence):
-/// merges [url]/[name]/[channels]/[clientSecret]; the default-room list
-/// only grows (a union — rooms are never un-remembered). [invites] is the
-/// authoritative pending-invite list — an empty list removes them all
-/// (delivered entries are dropped by the caller). [file] is injectable
-/// for tests. Auto-join on later launches flows through the shared
-/// channels file (the store joins every channel it has keys for).
+/// merges [url]/[name]/[channels]/[clientSecret]; [clearClientSecret]
+/// removes a stale cache entry (401 recovery — a secret the hub
+/// rejected must not win precedence over the master secret on later
+/// launches). The default-room list only grows (a union — rooms are
+/// never un-remembered). [invites] is the authoritative pending-invite
+/// list — an empty list removes them all (delivered entries are dropped
+/// by the caller). [file] is injectable for tests. Auto-join on later
+/// launches flows through the shared channels file (the store joins
+/// every channel it has keys for).
 Future<void> persistDapConfig({
   String? url,
   String? name,
   List<String>? channels,
   List<PendingInvite>? invites,
   String? clientSecret,
+  bool clearClientSecret = false,
   String? file,
 }) async {
   final path = file ?? defaultDapConfigFile();
@@ -160,6 +164,7 @@ Future<void> persistDapConfig({
     next['invites'] = [for (final invite in invites) invite.toJson()];
   }
   if (clientSecret != null) next['clientSecret'] = clientSecret;
+  if (clearClientSecret) next.remove('clientSecret');
   final target = File(path);
   if (!await target.parent.exists()) {
     await target.parent.create(recursive: true);
@@ -193,13 +198,39 @@ DapSettings resolveDapSettings({
   );
 }
 
+/// Where [resolveDapClientSecret] found the dial credential.
+enum DapSecretSource {
+  /// `DAP_CLIENT_SECRET` (env) — explicit user intent, never replaced.
+  env,
+
+  /// `clientSecret` from `~/.dap/config.json` — a persisted cache the
+  /// 401 path may drop and re-enroll once.
+  config,
+
+  /// `DAP_MASTER_SECRET` (env) — enroll-mode dial.
+  master,
+
+  /// Nothing resolved — the dial goes out bare and 401s.
+  none,
+}
+
 /// Hub dial credential per the enrollment contract: `DAP_CLIENT_SECRET`
 /// (env) > `clientSecret` from `~/.dap/config.json` ([config]) >
 /// `DAP_MASTER_SECRET` (env — enroll-mode: the connection enrolls once
 /// and the hub-issued secret replaces it). `token: null` dials anyway —
 /// the hub answers 401 and the client surfaces the frozen enrollment
 /// hint.
-({String? token, bool enroll}) resolveDapClientSecret({
+///
+/// [source] says where `token` came from and [master] echoes the raw
+/// `DAP_MASTER_SECRET` (null when unset) — on a 401 the dial path uses
+/// both to decide the one-shot stale-config-secret recovery without
+/// re-reading the environment.
+({
+  String? token,
+  bool enroll,
+  DapSecretSource source,
+  String? master,
+}) resolveDapClientSecret({
   Map<String, String> environment = const {},
   Map<String, dynamic>? config,
 }) {
@@ -208,13 +239,37 @@ DapSettings resolveDapSettings({
     return value == null || value.isEmpty ? null : value;
   }
 
+  final master = env(envMasterSecret);
   final client = env(envClientSecret);
-  if (client != null) return (token: client, enroll: false);
+  if (client != null) {
+    return (
+      token: client,
+      enroll: false,
+      source: DapSecretSource.env,
+      master: master,
+    );
+  }
   final stored = config?['clientSecret'];
   if (stored is String && stored.isNotEmpty) {
-    return (token: stored, enroll: false);
+    return (
+      token: stored,
+      enroll: false,
+      source: DapSecretSource.config,
+      master: master,
+    );
   }
-  final master = env(envMasterSecret);
-  if (master != null) return (token: master, enroll: true);
-  return (token: null, enroll: false);
+  if (master != null) {
+    return (
+      token: master,
+      enroll: true,
+      source: DapSecretSource.master,
+      master: master,
+    );
+  }
+  return (
+    token: null,
+    enroll: false,
+    source: DapSecretSource.none,
+    master: null,
+  );
 }

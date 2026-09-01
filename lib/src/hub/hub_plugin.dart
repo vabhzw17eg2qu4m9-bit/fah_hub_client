@@ -80,6 +80,8 @@ class HubPlugin implements FahPlugin {
       channelStore: await ChannelStore.fromFile(settings.channelsFile),
       clientSecret: token.token,
       enroll: token.enroll,
+      secretSource: token.source,
+      masterSecret: token.master,
       configFile: configFile,
       onNotice: (notice) => _io?.writeln('[hub] $notice'),
     );

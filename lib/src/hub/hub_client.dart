@@ -156,10 +156,12 @@ class HubClient {
   HubClient({
     required HubConfig config,
     required HubIdentity identity,
-    this.channelStore,
     String? clientSecret,
     bool enroll = false,
+    DapSecretSource secretSource = DapSecretSource.env,
+    String? masterSecret,
     this.configFile,
+    this.channelStore,
     this.onNotice,
     Duration Function(int attempt)? backoff,
     this.pingInterval = const Duration(seconds: 20),
@@ -168,6 +170,8 @@ class HubClient {
         _identity = identity,
         _clientSecret = clientSecret,
         _enroll = enroll,
+        _secretSource = secretSource,
+        _masterSecret = masterSecret,
         backoff = backoff ?? HubClient.defaultBackoff;
   HubConfig _config;
 
@@ -181,6 +185,20 @@ class HubClient {
   /// the `{"t":"enroll"}` frame goes out right after each hello until the
   /// hub answers `enrolled`.
   bool _enroll;
+
+  /// Where the dial secret came from ([DapSecretSource]): an `env`
+  /// secret is explicit user intent (a 401 hard-fails), a `config`
+  /// secret is a persisted cache the 401 path may drop and re-enroll
+  /// once ([_masterSecret] permitting).
+  DapSecretSource _secretSource;
+
+  /// Raw `DAP_MASTER_SECRET` kept for the one-shot stale-secret
+  /// re-enroll; null disables the escalation.
+  final String? _masterSecret;
+
+  /// Set once the stale-config-secret 401 escalation has run — exactly
+  /// one retry per client, never a loop.
+  bool _reenrolled = false;
 
   /// `~/.dap/config.json` (or `DAP_CONFIG_FILE`): where the hub-issued
   /// client secret is persisted ([persistDapConfig]). Null skips
@@ -349,6 +367,10 @@ class HubClient {
       });
     } on WebSocketException catch (error) {
       if (error.httpStatusCode == HttpStatus.unauthorized) {
+        // One-shot recovery for a stale persisted cache; ineligible or
+        // re-rejected -> `null` and the frozen hint below stays fatal.
+        final retried = await _recoverStaleSecret(epoch);
+        if (retried != null) return retried;
         // Bearer rejected before any websocket — fatal, no retry: the
         // frozen text tells the operator how to enroll or connect.
         final rejection = HubError('unauthorized', unauthorizedMsg);
@@ -413,6 +435,37 @@ class HubClient {
   }
 
   String? _welcomedAgentId;
+
+  /// One-shot stale-config-secret recovery, the 401 escalation path: a
+  /// rejected secret that came from `~/.dap/config.json` (never from
+  /// the env — that is explicit user intent) is dropped from the
+  /// persisted config and the dial runs once more in enroll-mode with
+  /// the master secret. The re-enroll binds to the same hello name, so
+  /// key files and agent identity stay untouched; the newly issued
+  /// secret is persisted through the same path as a first enroll.
+  ///
+  /// Returns the retry cycle's outcome (welcomed or not), or `null`
+  /// when ineligible (already escalated, env-sourced or master-less)
+  /// or when the retry 401'd again — the caller then throws the frozen
+  /// hint. Any other pre-welcome rejection propagates untouched.
+  Future<bool?> _recoverStaleSecret(int epoch) async {
+    if (_reenrolled ||
+        _secretSource != DapSecretSource.config ||
+        _masterSecret == null) {
+      return null;
+    }
+    _reenrolled = true; // exactly one retry, never a loop
+    await _dropStaleConfigSecret();
+    _clientSecret = _masterSecret;
+    _enroll = true;
+    _secretSource = DapSecretSource.master;
+    try {
+      return await _cycle(epoch);
+    } on HubError catch (retry) {
+      if (retry.code != 'unauthorized') rethrow;
+      return null;
+    }
+  }
 
   void _abandon(Completer<bool> welcomed, Completer<void> done) {
     if (!welcomed.isCompleted) {
@@ -850,6 +903,15 @@ class HubClient {
           if (!waiter.isCompleted) waiter.complete(count);
         }
     }
+  }
+
+  /// Removes the persisted clientSecret after the hub rejected it — a
+  /// provably dead cache that would otherwise win precedence over the
+  /// master secret on every later launch and 401 forever.
+  Future<void> _dropStaleConfigSecret() async {
+    final file = configFile;
+    if (file == null) return;
+    await persistDapConfig(clearClientSecret: true, file: file);
   }
 
   /// Hub accepted the enrollment: the issued secret replaces the master

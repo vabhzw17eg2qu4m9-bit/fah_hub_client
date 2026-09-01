@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.3
+
+- 401 self-recovery for a stale persisted client secret (live incident
+  2026-09-01: a hub restart wiped the server-side secrets, so every
+  previously enrolled client 401-looped — the cached `clientSecret`
+  won precedence over `DAP_MASTER_SECRET` and the rejection was
+  fatal). `resolveDapClientSecret` now also reports WHERE the dial
+  credential came from (`DapSecretSource`: env / config / master /
+  none) and echoes the raw master secret. On a pre-upgrade 401,
+  `HubClient` escalates EXACTLY ONCE when — and only when — the
+  rejected secret came from `~/.dap/config.json` AND a master secret
+  is available: it drops the provably dead cache entry from the
+  persisted config, dials again in enroll-mode (the re-enroll binds to
+  the same hello name — key files and agent identity untouched), and
+  persists the newly issued secret through the same path as a first
+  enroll. A second 401 is fatal with the frozen cross-adapter hint;
+  env-sourced secrets (`DAP_CLIENT_SECRET` = explicit user intent)
+  and master-less setups keep today's hard fail. No retry loops, no
+  new env vars.
+
 ## 0.2.2
 
 - Closed 0.2.1's residual first-query steal window: `HubClient` now

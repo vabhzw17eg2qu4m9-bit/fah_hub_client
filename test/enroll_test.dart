@@ -46,26 +46,51 @@ void main() {
         },
         config: stored,
       ),
-      (token: 'env-client', enroll: false),
+      (
+        token: 'env-client',
+        enroll: false,
+        source: DapSecretSource.env,
+        master: 'master',
+      ),
     );
     expect(
       resolveDapClientSecret(
           environment: const {'DAP_MASTER_SECRET': 'master'}, config: stored),
-      (token: 'stored', enroll: false),
+      (
+        token: 'stored',
+        enroll: false,
+        source: DapSecretSource.config,
+        master: 'master',
+      ),
     );
     expect(
       resolveDapClientSecret(
           environment: const {'DAP_MASTER_SECRET': 'master'}),
-      (token: 'master', enroll: true),
+      (
+        token: 'master',
+        enroll: true,
+        source: DapSecretSource.master,
+        master: 'master',
+      ),
     );
-    expect(resolveDapClientSecret(), (token: null, enroll: false));
+    expect(resolveDapClientSecret(), (
+      token: null,
+      enroll: false,
+      source: DapSecretSource.none,
+      master: null,
+    ));
     // Empty env values count as absent.
     expect(
       resolveDapClientSecret(environment: const {
         'DAP_CLIENT_SECRET': '',
         'DAP_MASTER_SECRET': 'm'
       }),
-      (token: 'm', enroll: true),
+      (
+        token: 'm',
+        enroll: true,
+        source: DapSecretSource.master,
+        master: 'm',
+      ),
     );
   }, timeout: timeout);
 
@@ -160,6 +185,159 @@ void main() {
       await hub.waitForHellos(2);
       expect(hub.dialAuths.last, 'Bearer ${hub.issuedSecret}');
       expect(hub.enrollCount, 1);
+    } finally {
+      await client.disconnect();
+      await hub.stop();
+    }
+  }, timeout: timeout);
+
+  test(
+      'stale config clientSecret + master: drops the cache, re-enrolls '
+      'once, persists the new secret, identity untouched', () async {
+    // Restarted hub: server-side secrets wiped, only the master secret
+    // is known — the persisted client cache 401s on sight.
+    final hub = FakeHub(masterSecret: 'hub-master');
+    await hub.start();
+    final home = await Directory.systemTemp.createTemp('fah-dap-stale-');
+    addTearDown(() => home.delete(recursive: true));
+    final keyPath = '${home.path}/.dap/keys/fah/bee.key';
+    final identity = await HubIdentity.load(keyPath);
+    final keyBytes = await File(keyPath).readAsBytes();
+    final cfgFile = '${home.path}/.dap/config.json';
+    await persistDapConfig(clientSecret: 'stale-cache', file: cfgFile);
+    final persisted = Completer<void>();
+    final client = HubClient(
+      config: HubConfig(url: hub.url.toString(), name: 'bee'),
+      identity: identity,
+      clientSecret: 'stale-cache',
+      secretSource: DapSecretSource.config,
+      masterSecret: 'hub-master',
+      configFile: cfgFile,
+      backoff: tinyBackoff,
+      onNotice: (notice) {
+        if (notice == 'enrolled: client secret persisted' &&
+            !persisted.isCompleted) {
+          persisted.complete();
+        }
+      },
+    );
+    try {
+      final agentId = await client.connect();
+      expect(agentId, identity.agentId); // same key -> same agent id
+      expect(hub.dialAuths,
+          ['Bearer stale-cache', 'Bearer hub-master']); // one escalation
+      await persisted.future.timeout(const Duration(seconds: 5));
+      expect(hub.enrollCount, 1);
+      expect(hub.issuedSecret, isNot('stale-cache'));
+      expect(hub.issuedName, 'bee'); // re-enroll bound to the hello name
+      expect(readDapConfig(cfgFile)['clientSecret'], hub.issuedSecret);
+      expect(await File(keyPath).readAsBytes(), keyBytes); // key untouched
+      // Settled: no third dial, no loop.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(hub.dialAuths, hasLength(2));
+    } finally {
+      await client.disconnect();
+      await hub.stop();
+    }
+  }, timeout: timeout);
+
+  test('stale ENV clientSecret + master: hard fail, config untouched',
+      () async {
+    // Restarted hub: it knows neither the env secret nor anything else.
+    final hub = FakeHub(masterSecret: 'hub-master');
+    await hub.start();
+    final home = await Directory.systemTemp.createTemp('fah-dap-env-');
+    addTearDown(() => home.delete(recursive: true));
+    final cfgFile = '${home.path}/.dap/config.json';
+    await persistDapConfig(url: 'ws://example/ws', name: 'bee', file: cfgFile);
+    final before = await File(cfgFile).readAsString();
+    final client = HubClient(
+      config: HubConfig(url: hub.url.toString(), name: 'bee'),
+      identity: await HubIdentity.generate(),
+      clientSecret: 'env-secret',
+      secretSource: DapSecretSource.env,
+      masterSecret: 'hub-master',
+      configFile: cfgFile,
+      backoff: tinyBackoff,
+    );
+    try {
+      await expectLater(
+        client.connect(),
+        throwsA(isA<HubError>()
+            .having((e) => e.code, 'code', 'unauthorized')
+            .having((e) => e.msg, 'msg', unauthorizedMsg)),
+      );
+      expect(hub.dialAuths, ['Bearer env-secret']); // env never retried
+      expect(await File(cfgFile).readAsString(), before);
+    } finally {
+      await client.disconnect();
+      await hub.stop();
+    }
+  }, timeout: timeout);
+
+  test('stale config clientSecret, no master: hard fail, cache kept', () async {
+    // Restarted hub: it does not know the persisted cache secret.
+    final hub = FakeHub(masterSecret: 'hub-master');
+    await hub.start();
+    final home = await Directory.systemTemp.createTemp('fah-dap-nomaster-');
+    addTearDown(() => home.delete(recursive: true));
+    final cfgFile = '${home.path}/.dap/config.json';
+    await persistDapConfig(clientSecret: 'stale-cache', file: cfgFile);
+    final before = await File(cfgFile).readAsString();
+    final client = HubClient(
+      config: HubConfig(url: hub.url.toString(), name: 'bee'),
+      identity: await HubIdentity.generate(),
+      clientSecret: 'stale-cache',
+      secretSource: DapSecretSource.config,
+      configFile: cfgFile,
+      backoff: tinyBackoff,
+    );
+    try {
+      await expectLater(
+        client.connect(),
+        throwsA(isA<HubError>()
+            .having((e) => e.code, 'code', 'unauthorized')
+            .having((e) => e.msg, 'msg', unauthorizedMsg)),
+      );
+      expect(hub.dialAuths, ['Bearer stale-cache']);
+      expect(readDapConfig(cfgFile)['clientSecret'], 'stale-cache');
+      expect(await File(cfgFile).readAsString(), before);
+    } finally {
+      await client.disconnect();
+      await hub.stop();
+    }
+  }, timeout: timeout);
+
+  test('re-enroll retry also 401s: fatal with the frozen hint, no loop',
+      () async {
+    // Restarted hub whose master differs from the client's: the
+    // escalation's enroll-mode retry 401s too.
+    final hub = FakeHub(masterSecret: 'real-master');
+    await hub.start();
+    final home = await Directory.systemTemp.createTemp('fah-dap-retry-');
+    addTearDown(() => home.delete(recursive: true));
+    final cfgFile = '${home.path}/.dap/config.json';
+    await persistDapConfig(clientSecret: 'stale-cache', file: cfgFile);
+    final client = HubClient(
+      config: HubConfig(url: hub.url.toString(), name: 'bee'),
+      identity: await HubIdentity.generate(),
+      clientSecret: 'stale-cache',
+      secretSource: DapSecretSource.config,
+      masterSecret: 'wrong-master',
+      configFile: cfgFile,
+      backoff: tinyBackoff,
+    );
+    try {
+      await expectLater(
+        client.connect(),
+        throwsA(isA<HubError>()
+            .having((e) => e.code, 'code', 'unauthorized')
+            .having((e) => e.msg, 'msg', unauthorizedMsg)),
+      );
+      // The provably dead cache is gone, the file stays valid JSON.
+      expect(readDapConfig(cfgFile).containsKey('clientSecret'), isFalse);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(hub.dialAuths, hasLength(2)); // no loop
     } finally {
       await client.disconnect();
       await hub.stop();
