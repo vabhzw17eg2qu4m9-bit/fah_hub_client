@@ -209,7 +209,8 @@ void main() {
     await persistDapConfig(
         channels: ['general'], file: '${tmp.path}/.dap/config.json');
 
-    final plugin = HubPlugin(environment: {envMasterSecret: 'm'}, home: tmp.path);
+    final plugin =
+        HubPlugin(environment: {envMasterSecret: 'm'}, home: tmp.path);
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString()},
     }));

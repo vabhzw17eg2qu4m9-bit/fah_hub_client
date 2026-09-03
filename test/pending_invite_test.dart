@@ -360,7 +360,8 @@ void main() {
     final tmp = await tmpHome('fah-pend-plugin-');
     addTearDown(() => tmp.delete(recursive: true));
 
-    final plugin = HubPlugin(environment: {envMasterSecret: 'm'}, home: tmp.path);
+    final plugin =
+        HubPlugin(environment: {envMasterSecret: 'm'}, home: tmp.path);
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString(), 'name': 'zed'},
     }));

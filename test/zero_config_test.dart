@@ -266,7 +266,8 @@ void main() {
 
     // An explicitly configured url (here: the yaml `hub:` section) is not
     // default — its connect failures keep the full error.
-    final plugin = HubPlugin(environment: {envMasterSecret: 'm'}, home: home.path);
+    final plugin =
+        HubPlugin(environment: {envMasterSecret: 'm'}, home: home.path);
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString(), 'name': 'defurl'},
     }));

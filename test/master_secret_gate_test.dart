@@ -60,8 +60,7 @@ void main() {
     await plugin.dispose();
   }, timeout: timeout);
 
-  test('no DAP_MASTER_SECRET: every public method fails honestly',
-      () async {
+  test('no DAP_MASTER_SECRET: every public method fails honestly', () async {
     final hub = FakeHub();
     await hub.start();
     addTearDown(() => hub.stop());
@@ -70,21 +69,31 @@ void main() {
 
     // DAP_CLIENT_SECRET / config secrets do NOT unlock a gated plugin:
     // the gate is DAP_MASTER_SECRET alone.
-    final plugin = _plugin(
-        const {envClientSecret: 'client'}, home.path, hub.url);
+    final plugin =
+        _plugin(const {envClientSecret: 'client'}, home.path, hub.url);
     await plugin.start();
     expect(hub.dialAuths, isEmpty);
 
-    await expectLater(plugin.inviteTo('carol'),
-        throwsA(isA<StateError>().having((e) => e.message, 'message', disabledMsg)));
-    await expectLater(plugin.connectTo('127.0.0.1:${hub.url.port}'),
-        throwsA(isA<StateError>().having((e) => e.message, 'message', disabledMsg)));
-    await expectLater(plugin.status(),
-        throwsA(isA<StateError>().having((e) => e.message, 'message', disabledMsg)));
-    await expectLater(plugin.peers(),
-        throwsA(isA<StateError>().having((e) => e.message, 'message', disabledMsg)));
-    await expectLater(plugin.sendToChannel('general', 'hi'),
-        throwsA(isA<StateError>().having((e) => e.message, 'message', disabledMsg)));
+    await expectLater(
+        plugin.inviteTo('carol'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', disabledMsg)));
+    await expectLater(
+        plugin.connectTo('127.0.0.1:${hub.url.port}'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', disabledMsg)));
+    await expectLater(
+        plugin.status(),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', disabledMsg)));
+    await expectLater(
+        plugin.peers(),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', disabledMsg)));
+    await expectLater(
+        plugin.sendToChannel('general', 'hi'),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', disabledMsg)));
     expect(hub.dialAuths, isEmpty); // still nothing dialed
     await plugin.dispose();
   }, timeout: timeout);
@@ -96,8 +105,7 @@ void main() {
     final home = await _tmpHome('fah-dap-gate-empty-');
     addTearDown(() => home.delete(recursive: true));
 
-    final plugin =
-        _plugin(const {envMasterSecret: ''}, home.path, hub.url);
+    final plugin = _plugin(const {envMasterSecret: ''}, home.path, hub.url);
     await plugin.start();
     await Future<void>.delayed(Duration.zero);
 
@@ -109,8 +117,7 @@ void main() {
     await plugin.dispose();
   }, timeout: timeout);
 
-  test('DAP_MASTER_SECRET set: unchanged enroll + connect behavior',
-      () async {
+  test('DAP_MASTER_SECRET set: unchanged enroll + connect behavior', () async {
     final hub = FakeHub(masterSecret: 'hub-master');
     await hub.start();
     addTearDown(() => hub.stop());
@@ -118,9 +125,9 @@ void main() {
     addTearDown(() => home.delete(recursive: true));
     final io = _CaptureIO();
 
-    final plugin =
-        _plugin(const {envMasterSecret: 'hub-master'}, home.path, hub.url,
-            io: io);
+    final plugin = _plugin(
+        const {envMasterSecret: 'hub-master'}, home.path, hub.url,
+        io: io);
     await plugin.start();
     await hub.waitForHellos(1);
 

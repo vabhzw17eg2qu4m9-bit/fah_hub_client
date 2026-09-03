@@ -111,7 +111,10 @@ void main() {
     addTearDown(() => home.delete(recursive: true));
 
     final plugin = HubPlugin(
-      environment: {envChannelsFile: '${home.path}/channels.json', envMasterSecret: 'm'},
+      environment: {
+        envChannelsFile: '${home.path}/channels.json',
+        envMasterSecret: 'm'
+      },
       home: home.path,
     );
     plugin.register(
