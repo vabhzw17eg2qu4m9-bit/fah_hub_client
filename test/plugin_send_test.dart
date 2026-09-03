@@ -19,7 +19,7 @@ void main() {
   test(
     'sendToChannel before start(): honest StateError, not silence',
     () async {
-      final plugin = HubPlugin(environment: {});
+      final plugin = HubPlugin(environment: {envMasterSecret: 'm'});
       plugin.register(PluginContext());
       expect(plugin.sendToChannel('general', 'hi'), throwsStateError);
     },
@@ -58,7 +58,7 @@ void main() {
       addTearDown(() => bystander.disconnect());
 
       final plugin = HubPlugin(
-        environment: {envChannelsFile: channelsFile},
+        environment: {envChannelsFile: channelsFile, envMasterSecret: 'm'},
         home: home.path,
       );
       plugin.register(
@@ -111,7 +111,10 @@ void main() {
     addTearDown(() => home.delete(recursive: true));
 
     final plugin = HubPlugin(
-      environment: {envChannelsFile: '${home.path}/channels.json'},
+      environment: {
+        envChannelsFile: '${home.path}/channels.json',
+        envMasterSecret: 'm'
+      },
       home: home.path,
     );
     plugin.register(

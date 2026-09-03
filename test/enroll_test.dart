@@ -386,7 +386,8 @@ void main() {
     final home = await Directory.systemTemp.createTemp('fah-dap-hint-');
     addTearDown(() => home.delete(recursive: true));
     final io = _CaptureIO();
-    final plugin = HubPlugin(environment: const {}, home: home.path);
+    final plugin =
+        HubPlugin(environment: {envMasterSecret: 'm'}, home: home.path);
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString()},
     }, io: io));
