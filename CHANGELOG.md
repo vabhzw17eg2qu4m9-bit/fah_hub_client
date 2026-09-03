@@ -136,4 +136,8 @@
 - chore: apply dart format
 - fix: plugin inert without DAP_MASTER_SECRET
 
+## 0.2.7
+
+- fix(ci): publish to pub.dev from tag refs via workflow_dispatch
+
 ## Unreleased
