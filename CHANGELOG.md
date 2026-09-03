@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.8
+
+- **Renamed and published as `fa_hub_client`** (the `fah_hub_client`
+  package name is owned by a different pub.dev account; same code, MIT
+  license preserved, original copyright retained).
+- **Critical CPU fix:** `HubClient.defaultBackoff` clamped the attempt
+  BEFORE shifting — `1 << (attempt - 1)` overflows 64-bit int semantics
+  (attempt 64 → negative, attempt 65+ → 0), so the 30 s cap never applied
+  past the 64th failed reconnect and the loop degraded into a tight spin
+  reconnecting to a dead hub at full speed forever. Observed live:
+  `_reconnectAttempt = 69,730,601` with every idle `fa` process burning
+  ~60–90% CPU (plus `kernel_task`/`xprotectd` amplification from the
+  socket churn). Every reconnect now waits ≥1 s, capped at 30 s, no
+  matter how long the hub stays down.
+
 ## 0.2.4
 
 - Additive liveness surface for the messaging fabric. `AgentInfo.lastSeen`

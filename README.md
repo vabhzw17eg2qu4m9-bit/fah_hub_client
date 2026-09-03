@@ -1,10 +1,10 @@
-# fah_hub_client
+# fa_hub_client
 
-[![CI](https://github.com/vabhzw17eg2qu4m9-bit/fah_hub_client/actions/workflows/ci.yml/badge.svg)](https://github.com/vabhzw17eg2qu4m9-bit/fah_hub_client/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/vabhzw17eg2qu4m9-bit/fah_hub_client)](https://github.com/vabhzw17eg2qu4m9-bit/fah_hub_client/releases)
+[![CI](https://github.com/vabhzw17eg2qu4m9-bit/fa_hub_client/actions/workflows/ci.yml/badge.svg)](https://github.com/vabhzw17eg2qu4m9-bit/fa_hub_client/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/vabhzw17eg2qu4m9-bit/fa_hub_client)](https://github.com/vabhzw17eg2qu4m9-bit/fa_hub_client/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![pub](https://img.shields.io/pub/v/fah_hub_client.svg)](https://pub.dev/packages/fah_hub_client)
-[![pub points](https://img.shields.io/pub/points/fah_hub_client.svg)](https://pub.dev/packages/fah_hub_client/score)
+[![pub](https://img.shields.io/pub/v/fa_hub_client.svg)](https://pub.dev/packages/fa_hub_client)
+[![pub points](https://img.shields.io/pub/points/fa_hub_client.svg)](https://pub.dev/packages/fa_hub_client/score)
 
 DAP/1 hub client for [flutter_agent_harness](https://github.com/IstiN/flutter_agent_harness):
 a `MessagingRepository` over a signed WebSocket, delivered into the agent loop
@@ -13,20 +13,20 @@ via `Agent.externalSteeringSource`.
 ## Install
 
 ```sh
-dart pub add fah_hub_client
+dart pub add fa_hub_client
 ```
 
 or in `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  fah_hub_client: ^0.2.0
+  fa_hub_client: ^0.2.0
 ```
 
 ## Usage
 
 ```dart
-import 'package:fah_hub_client/fah_hub_client.dart';
+import 'package:fa_hub_client/fa_hub_client.dart';
 
 final plugin = HubPlugin();
 plugin.register(context); // reads context.config['hub']
