@@ -164,7 +164,7 @@ void main() {
     final keyPath = '${tmp.path}/hub-key';
     addTearDown(() => tmp.delete(recursive: true));
 
-    final plugin = HubPlugin(environment: {});
+    final plugin = HubPlugin(environment: {envMasterSecret: 'm'});
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString(), 'keyPath': keyPath, 'name': 'bee'},
     }));
@@ -209,7 +209,7 @@ void main() {
     await persistDapConfig(
         channels: ['general'], file: '${tmp.path}/.dap/config.json');
 
-    final plugin = HubPlugin(environment: {}, home: tmp.path);
+    final plugin = HubPlugin(environment: {envMasterSecret: 'm'}, home: tmp.path);
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString()},
     }));

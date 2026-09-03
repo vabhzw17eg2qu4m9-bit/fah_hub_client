@@ -42,6 +42,18 @@ class HubPlugin implements FahPlugin {
   HubIdentity? _identity;
   StreamSubscription<HubError>? _errorSub;
 
+  /// The plugin's kill switch: `DAP_MASTER_SECRET` (injected environment)
+  /// unset or empty → the plugin does nothing and shows nothing — no
+  /// connection, no reconnect, no keepalive, no presence poller, no output.
+  bool get _dapEnabled => (environment[envMasterSecret] ?? '').isNotEmpty;
+
+  /// One honest failure for every public method invoked while inactive.
+  void _requireDapEnabled() {
+    if (!_dapEnabled) {
+      throw StateError('DAP_MASTER_SECRET is not set — DAP disabled');
+    }
+  }
+
   @override
   String get name => 'hub';
 
@@ -61,6 +73,7 @@ class HubPlugin implements FahPlugin {
   /// `~/.dap/keys/fah/<name|hostname>.key`), and the channel store picks up
   /// the machine-shared `~/.dap/channels.json`. Idempotent.
   Future<void> start({HubIdentity? identity}) async {
+    if (!_dapEnabled) return;
     if (_repository != null) return;
     final settings = resolveDapSettings(
         config: _config, environment: environment, home: home);
@@ -133,6 +146,7 @@ class HubPlugin implements FahPlugin {
   /// hosts register their `invite` tool around this one-liner; the
   /// upstream PR would wire `registerTool` directly.
   Future<InviteResult> inviteTo(String nameOrId, {String? channel}) async {
+    _requireDapEnabled();
     final invites = _invites;
     if (invites == null) {
       throw StateError('plugin not started — call start() first');
@@ -154,6 +168,7 @@ class HubPlugin implements FahPlugin {
   /// you post, but the members cannot read you.
   Future<DapConnection> connectTo(String host,
       {String? name, String? channel}) async {
+    _requireDapEnabled();
     final repository = _repository;
     if (repository == null) {
       throw StateError('plugin not started — call start() first');
@@ -181,6 +196,7 @@ class HubPlugin implements FahPlugin {
   /// tool registry, so hosts register their `status` tool around this
   /// one-liner; the upstream PR would wire `registerTool` directly.
   Future<HubStatus> status() async {
+    _requireDapEnabled();
     final repository = _repository;
     if (repository == null) {
       throw StateError('plugin not started — call start() first');
@@ -192,6 +208,7 @@ class HubPlugin implements FahPlugin {
   /// online-only, our own entry marked self; same registerTool pattern
   /// as [status].
   Future<List<AgentInfo>> peers() async {
+    _requireDapEnabled();
     final repository = _repository;
     if (repository == null) {
       throw StateError('plugin not started — call start() first');
@@ -205,6 +222,7 @@ class HubPlugin implements FahPlugin {
   /// honest failure (throws when not connected). Same registerTool
   /// pattern as [status].
   Future<void> sendToChannel(String channel, String text) async {
+    _requireDapEnabled();
     final repository = _repository;
     if (repository == null) {
       throw StateError('plugin not started — call start() first');

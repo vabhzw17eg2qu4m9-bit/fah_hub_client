@@ -360,7 +360,7 @@ void main() {
     final tmp = await tmpHome('fah-pend-plugin-');
     addTearDown(() => tmp.delete(recursive: true));
 
-    final plugin = HubPlugin(environment: {}, home: tmp.path);
+    final plugin = HubPlugin(environment: {envMasterSecret: 'm'}, home: tmp.path);
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString(), 'name': 'zed'},
     }));
@@ -384,7 +384,7 @@ void main() {
     await plugin.dispose();
 
     // Before start: honest StateError, not a silent result.
-    final unstarted = HubPlugin(environment: {});
+    final unstarted = HubPlugin(environment: {envMasterSecret: 'm'});
     unstarted.register(PluginContext());
     expect(unstarted.inviteTo('carol'), throwsStateError);
   }, timeout: timeout);

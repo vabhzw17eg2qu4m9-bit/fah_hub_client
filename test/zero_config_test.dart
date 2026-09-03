@@ -226,7 +226,7 @@ void main() {
     await persistChannelKeys(channelsFile, 'lobby', lobbyKeys);
 
     final plugin = HubPlugin(
-      environment: {envChannelsFile: channelsFile},
+      environment: {envChannelsFile: channelsFile, envMasterSecret: 'm'},
       home: home.path,
     );
     plugin.register(PluginContext(config: {
@@ -266,7 +266,7 @@ void main() {
 
     // An explicitly configured url (here: the yaml `hub:` section) is not
     // default — its connect failures keep the full error.
-    final plugin = HubPlugin(environment: const {}, home: home.path);
+    final plugin = HubPlugin(environment: {envMasterSecret: 'm'}, home: home.path);
     plugin.register(PluginContext(config: {
       'hub': {'url': hub.url.toString(), 'name': 'defurl'},
     }));
