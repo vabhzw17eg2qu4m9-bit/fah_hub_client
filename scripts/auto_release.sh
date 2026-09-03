@@ -2,9 +2,10 @@
 # Auto-release: bump the patch version, update CHANGELOG.md, commit, tag, push.
 #
 # Runs in CI on pushes to main and the 2h schedule (the `release` job in
-# .github/workflows/ci.yml). The publish job is chained via needs: on this
-# job's outputs (released/tag), so the default GITHUB_TOKEN is enough —
-# no PAT secret required.
+# .github/workflows/ci.yml). The publish job runs only from tag refs (pub.dev's
+# OIDC check rejects branch refs); this script dispatches CI on the fresh tag
+# because GITHUB_TOKEN pushes do not trigger workflows (workflow_dispatch is
+# exempt) — the default GITHUB_TOKEN is enough, no PAT secret required.
 #
 # Changelog rules:
 # - a curated `## Unreleased` section becomes the new version's notes;
@@ -108,6 +109,22 @@ PY
     if command -v gh >/dev/null 2>&1; then
       gh release create "v$next" --title "v$next" --generate-notes || \
         echo "WARN: gh release create failed (tag exists; release page skipped)"
+    fi
+    # The tag push above triggers no workflow run (GITHUB_TOKEN pushes do not
+    # start workflows), so dispatch CI on the new tag ourselves: workflow_dispatch
+    # events are exempt, and the dispatched run carries refs/tags/v$next
+    # (refType=tag), which is what pub.dev's OIDC check requires. Dispatch
+    # propagation can lag — retry briefly. Failure here is fatal: a silently
+    # skipped dispatch strands the publish (exactly how v0.2.6 never reached pub.dev).
+    dispatched=false
+    for d in 1 2 3; do
+      if gh workflow run CI --ref "v$next"; then dispatched=true; break; fi
+      echo "CI dispatch attempt $d failed (propagation can lag); retrying..."
+      sleep 5
+    done
+    if [ "$dispatched" != true ]; then
+      echo "ERROR: could not dispatch CI on v$next — publish would be stranded, failing the release job"
+      exit 1
     fi
     echo "Released v$next"
     exit 0
