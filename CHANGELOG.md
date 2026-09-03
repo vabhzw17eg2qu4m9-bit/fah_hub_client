@@ -2,6 +2,9 @@
 
 ## 0.2.8
 
+- **Renamed and published as `fa_hub_client`** (the `fah_hub_client`
+  package name is owned by a different pub.dev account; same code, MIT
+  license preserved, original copyright retained).
 - **Critical CPU fix:** `HubClient.defaultBackoff` clamped the attempt
   BEFORE shifting — `1 << (attempt - 1)` overflows 64-bit int semantics
   (attempt 64 → negative, attempt 65+ → 0), so the 30 s cap never applied
