@@ -318,10 +318,13 @@ class HubClient {
 
   /// 1 s doubling, capped at 30 s (spec "Client reconnect").
   static Duration defaultBackoff(int attempt) {
-    final seconds = 1 << (attempt - 1);
-    return seconds > 30
-        ? const Duration(seconds: 30)
-        : Duration(seconds: seconds);
+    // Clamp BEFORE shifting: `1 << (attempt - 1)` overflows 64-bit shift
+    // semantics — attempt 64 is negative and attempt 65+ is ZERO, so the
+    // `seconds > 30` cap never fired and the delay degenerated to
+    // Duration.zero: a tight reconnect loop burning a full core forever
+    // (observed live at _reconnectAttempt = 69,730,601).
+    if (attempt >= 6) return const Duration(seconds: 30);
+    return Duration(seconds: 1 << (attempt - 1));
   }
 
   /// Connects and keeps the connection alive until [disconnect]. Completes
