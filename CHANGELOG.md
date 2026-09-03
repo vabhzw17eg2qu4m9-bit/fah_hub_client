@@ -131,4 +131,9 @@
 
 - feat(plugin): public sendToChannel — channel-send parity with omp's dap_send
 
+## 0.2.6
+
+- chore: apply dart format
+- fix: plugin inert without DAP_MASTER_SECRET
+
 ## Unreleased
